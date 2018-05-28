@@ -14,6 +14,7 @@ extern volatile unsigned short current_fps;
 
 enum ERROR_TYPE {
 	ERROR_NONE,
+	ERROR_ILLEGAL_INSTRUCTION,
 	ERROR_OUT_OF_MEM,
 	ERROR_COMPRESS,
 	ERROR_FILE_SYS,

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 
 /*
 things to check
@@ -29,9 +30,16 @@ enum {
 
 #define MAX_LINE_LENGTH 5096
 #define NONE -1
+
+#define OPCODE_SIZE 70
+#define PREFIX_OPCODE_SIZE 60
+#define IO_WRITE_SIZE 60
+#define MEM_WRITE_SIZE 60
 	
 OPCODE_HEADER opcode_table[256];
 OPCODE_HEADER suffix_table[256];
+int cycles_table[512];
+int event_table[256];
 FILE *in, *func_out, *table_out;
 unsigned char opcode_index;
 unsigned char prefix;
@@ -118,20 +126,21 @@ typedef struct _ARG_FORMAT {
 //gb_data: hl, bc, de, sp, last_src (word), last_dst (word)
 
 //gb_pc - %a4
+//gb_sp - %a2
 //gb_data - %a5
 //gb_mem - %a3
-//gb_A %d5
-//gb_F0 %d6 
-//gb_F1 %d7
-//temp - %d0
+//opcode_block - %a6
+//gb_A - %d5
+//gb_flags - %d6 
+//gb_bc - %d2
+//gb_de - %d3
+//gb_hl - %d7
+//counter - %d4
 
 //FLAG FORMAT
-//F0[0] - carry flag
-//F1[2] - zero flag
-//F1[31] - iff
-//F1[5] - add/subtract flag
-//F1[6] - if add, a 1 here signifies a 16 bit add
-//F1[7] - 1 specifies carry operation
+//[0] - carry flag
+//[2] - zero flag
+//[23:16] - last a (used for bcd)
 
 /*char *reg_base[] = {
 	"",
@@ -155,64 +164,6 @@ typedef struct _ARG_FORMAT {
 	"(SP_FUNC, %a5)",
 };*/
 
-char *arg_table[] = {
-	"%d5",			//A
-	"(%a5, 2)",		//B
-	"(%a5, 3)",		//C
-	"(%a5, 4)",		//D
-	"(%a5, 5)",		//E
-	"(%a5)",		//H
-	"(%a5, 1)",		//L
-	"(%a5, 6)",		//SP
-	"(%a5, 7)",		//P
-	"%d0",			//DT0
-	"%d1",			//DT1
-	"%d2",			//DT2
-	"%d3",			//DT3
-	"(%a0, %d0.w)",	//(MEM)
-	"(%a4)+",		//immd8
-	"#0", "#1", "#2", "#3", "#4", "#5", "#6", "#7",
-	"#0x00", "#0x08", "#0x10", "#0x18", "#0x20", "#0x28", "#0x30", "#0x38",
-};
-
-char *arg_table_static[] = {
-	"%d5",			//A
-	"(%a5, 2)",		//B
-	"(%a5, 3)",		//C
-	"(%a5, 4)",		//D
-	"(%a5, 5)",		//E
-	"(%a5)",		//H
-	"(%a5, 1)",		//L
-	"(%a5, 6)",		//SP
-	"(%a5, 7)",		//P
-	"%d0",			//DT0
-	"%d1",			//DT1
-	"%d2",			//DT2
-	"%d3",			//DT3
-	"(%a0, %d0.w)",	//MEM
-	"(%a4)",		//immd8
-	"#0", "#1", "#2", "#3", "#4", "#5", "#6", "#7",
-	"#0x00", "#0x08", "#0x10", "#0x18", "#0x20", "#0x28", "#0x30", "#0x38",
-};
-
-enum OPCODE_TYPES {
-	TYPE_LD8,
-	TYPE_LD16,
-
-	TYPE_INC,
-	TYPE_DEC,
-	TYPE_RLC,
-	TYPE_RL,
-	TYPE_RRC,
-	TYPE_RR,
-	TYPE_SLA,
-	TYPE_SRA,
-	TYPE_SRL,
-	TYPE_SET,
-	TYPE_RES,
-	TYPE_SWAP,
-};
-
 enum ARG_TAGS {
 	ARG_A,
 	ARG_B,
@@ -235,6 +186,86 @@ enum ARG_TAGS {
 	ARG_FZ,
 	ARG_FNC,
 	ARG_FC,
+	ARG_NUMBER,
+};
+
+char swap_table[ARG_NUMBER] = {
+	0, //A
+	1, //B
+	0, //C
+	1, //D
+	0, //E
+	1, //H
+	0, //L
+};
+
+char *arg_table[ARG_NUMBER] = {
+	"%d5",		//A
+	"%d2",		//B
+	"%d2",		//C
+	"%d3",		//D
+	"%d3",		//E
+	"%d7",		//H
+	"%d7",		//L
+	"(%a5, 6)",		//SP
+	"(%a5, 7)",		//P
+	"%d0",			//DT0
+	"%d1",			//DT1
+	"%d2",			//DT2
+	"%d3",			//DT3
+	"(%a0, %d0.w)",	//(MEM)
+	"(%a4)+",		//immd8
+	"#0", "#1", "#2", "#3", "#4", "#5", "#6", "#7",
+	"0x00", "0x08", "0x10", "0x18", "0x20", "0x28", "0x30", "0x38",
+};
+
+char *arg_table_static[ARG_NUMBER] = {
+	"%d5",		//A
+	"%d2",		//B
+	"%d2",		//C
+	"%d3",		//D
+	"%d3",		//E
+	"%d7",		//H
+	"%d7",		//L
+	"(%a5, 6)",		//SP
+	"(%a5, 7)",		//P
+	"%d0",			//DT0
+	"%d1",			//DT1
+	"%d2",			//DT2
+	"%d3",			//DT3
+	"(%a0, %d0.w)",	//MEM
+	"(%a4)",		//immd8
+	"#0", "#1", "#2", "#3", "#4", "#5", "#6", "#7",
+	"0x00", "0x08", "0x10", "0x18", "0x20", "0x28", "0x30", "0x38",
+};
+
+char *upper_bits[] = {
+	"#16",
+	"#17",
+	"#18",
+	"#19"
+	"#20",
+	"#21",
+	"#22",
+	"#23",
+};
+
+enum OPCODE_TYPES {
+	TYPE_LD8,
+	TYPE_LD16,
+
+	TYPE_INC,
+	TYPE_DEC,
+	TYPE_RLC,
+	TYPE_RL,
+	TYPE_RRC,
+	TYPE_RR,
+	TYPE_SLA,
+	TYPE_SRA,
+	TYPE_SRL,
+	TYPE_SET,
+	TYPE_RES,
+	TYPE_SWAP,
 };
 
 enum ARG_PREFIX {
@@ -254,13 +285,14 @@ enum ARG_SPECIAL {
 	//SPECIAL_DEC_SP,
 };
 
-void next_instruction2(char *lable)
+/*void next_instruction2(char *lable)
 {
 	int offset;
 
 	if(opcode_index < 128) offset = 256 * opcode_index;
 	else offset = -(256-opcode_index) * 256;
-	if(prefix == 0xCB) offset += 180;
+	if(prefix == 0xCB) offset += OPCODE_SIZE;
+	offset += 6; //skip over mem entry
 	
 	//hack to get around stupid assembler
 	if(prefix == 0x00 && opcode_index == 0x80)
@@ -269,13 +301,13 @@ void next_instruction2(char *lable)
 	else
 		fprintf(func_out, "\tNEXT_INSTRUCTION %s - opcode%02X%02X + (%d)\n",
 		lable, prefix, opcode_index, offset);
-}
+}*/
 
 void next_instruction()
 {
-	char lable[1024];
-	sprintf(lable, "opcode%02X%02X_end", prefix, opcode_index);
-	next_instruction2(lable);
+	//char lable[1024];
+	//sprintf(lable, "opcode%02X%02X_end", prefix, opcode_index);
+	//next_instruction2(lable);
 }
 
 
@@ -297,18 +329,95 @@ void set_half_carry_flag()
 }
 
 //update_zero_flag also clears subtract and clears 16bit
-void update_carry_flag() { fprintf(func_out, "\tmove.w %%sr, %%d6 | update carry\n"); }
+/*void update_carry_flag() { fprintf(func_out, "\tmove.w %%sr, %%d6 | update carry\n"); }
 void update_zero_flag() { fprintf(func_out, "\tmove.w %%sr, %%d7 | update zero\n"); }
-void set_subtract_flag() { fprintf(func_out, "\tori.b #0x20, %%d7 | set subtract\n"); }
-void clear_subtract_flag() { fprintf(func_out, "\tandi.b #~0x20, %%d7 | clear subtract\n"); }
-void clear_carry_flag() { fprintf(func_out, "\tclr.b %%d6 | clear carry\n"); }
-void clear_zero_flag() { fprintf(func_out, "\tclr.b %%d7 | clear zero\n"); }
+void update_zc_flags()
+{
+	fprintf(func_out, "\tmove.w %%sr, %%d6 | update carry\n");
+	fprintf(func_out, "\tmove.w %%d6, %%d7 | update zero\n");
+}*/
+
+void updateZC()
+{
+	fprintf(func_out, "\tmove.w %%sr, %%d6 | update zero, carry\n");
+}
+
+void updateC_clearZ_fast(char *op, ...)
+{
+	va_list ap;
+	
+	fprintf(func_out, "\tclr.w %%d6\n");
+	va_start(ap, op);
+	vfprintf(func_out, op, ap);
+	va_end(ap);
+	fprintf(func_out, "\taddx.w %%d6, %%d6 | update carry, clear zero\n");
+}
+
+void updateC_clearZ(char *op, ...)
+{
+	va_list ap;
+	
+	fprintf(func_out, "\tclr.w %%d6\n");
+	va_start(ap, op);
+	vfprintf(func_out, op, ap);
+	va_end(ap);
+	fprintf(func_out, "\tbcc 0f\n");
+	fprintf(func_out, "\tori.b #0x01, %%d6 | update carry, clear zero\n");
+	fprintf(func_out, "0:\n");
+}
+
+void updateZ_clearC(char *op, ...)
+{
+	va_list ap;
+	
+	fprintf(func_out, "\tclr.w %%d6\n");
+	va_start(ap, op);
+	vfprintf(func_out, op, ap);
+	va_end(ap);
+	fprintf(func_out, "\tbne 0f\n");
+	fprintf(func_out, "\tori.b #0x04, %%d6 | update zero, clear carry\n");
+	fprintf(func_out, "0:\n");
+}
+
+void updateZ(char *op, ...)
+{
+	va_list ap;
+	
+	//fprintf(func_out, "\tmoveq #0x04, %%d0\n");
+	fprintf(func_out, "\tor.b #0x04, %%d6\n");
+	va_start(ap, op);
+	vfprintf(func_out, op, ap);
+	va_end(ap);
+	fprintf(func_out, "\tbeq 0f\n");
+	fprintf(func_out, "\teor.b #0x04, %%d6 | update zero\n");
+	fprintf(func_out, "0:\n");
+}
+
+void updateC(char *op, ...)
+{
+	va_list ap;
+	
+	//fprintf(func_out, "\tmoveq #0x01, %%d0\n");
+	fprintf(func_out, "\tor.b #0x01, %%d6\n");
+	va_start(ap, op);
+	vfprintf(func_out, op, ap);
+	va_end(ap);
+	fprintf(func_out, "\tbcs 0f\n");
+	fprintf(func_out, "\teor.b #0x01, %%d6 | update carry\n");
+	fprintf(func_out, "0:\n");
+}
+
+//void set_subtract_flag() { fprintf(func_out, "\tori.b #0x20, %%d7 | set subtract\n"); }
+//void clear_subtract_flag() { fprintf(func_out, "\tandi.b #~0x20, %%d7 | clear subtract\n"); }
+//void clear_carry_flag() { fprintf(func_out, "\tclr.b %%d6 | clear carry\n"); }
+//void clear_zero_flag() { fprintf(func_out, "\tclr.b %%d7 | clear zero\n"); }
 
 void carry_to_extend()
 {
-	fprintf(func_out, "\tbtst.b #0, %%d6 | copy carry to extend\n");
-	fprintf(func_out, "\tsne %%d1\n"); //Z clear - 0xff, Z set - 0x00
-	fprintf(func_out, "\tadd.b %%d1, %%d1\n"); //set extend flag with 0xff+0xff, clear with 0+0
+	//fprintf(func_out, "\tbtst.b #0, %%d6 | copy carry to extend\n");
+	//fprintf(func_out, "\tsne %%d1\n"); //Z clear - 0xff, Z set - 0x00
+	//fprintf(func_out, "\tadd.b %%d1, %%d1\n"); //set extend flag with 0xff+0xff, clear with 0+0
+	fprintf(func_out, "\tlsr.b #1, %%d6 | copy carry to extend\n");
 }
 
 void calculate_half_carry()
@@ -358,216 +467,147 @@ void calculate_half_carry()
 	fprintf(func_out, "\trts\n");
 }
 
+void write_mem_access_patch(char *arg)
+{
+	int offset;
+
+	if(opcode_index < 128) offset = 256 * opcode_index;
+	else offset = -(256-opcode_index) * 256;
+	offset += MEM_WRITE_SIZE + IO_WRITE_SIZE + 6;
+	if(prefix == 0x00) offset += PREFIX_OPCODE_SIZE;
+	if(event_table[opcode_index] == 0) offset += 2; //skip over subq
+	
+	if(prefix == 0xff) {
+		fprintf(func_out, "\tmove.b %s, (6f-function_base+2, %%a3)\n", arg);
+	} else {
+		fprintf(func_out, "\tmove.b %s, (6f - opcode%02X%02X + 2 + (%d), %%a6)\n",
+			arg, prefix, opcode_index, offset);
+	}
+}
+
+void write_bra(char *bra, int target_opcode, int offset)
+{
+	int current_offset;
+	int target_offset;
+	//CALL is opcode 0xCD
+	
+	if(target_opcode < 128) target_offset = 256 * target_opcode;
+	else target_offset = -(256-target_opcode) * 256;
+	target_offset += MEM_WRITE_SIZE + IO_WRITE_SIZE + PREFIX_OPCODE_SIZE + 6;
+	target_offset += offset;
+
+	if(opcode_index < 128) current_offset = 256 * opcode_index;
+	else current_offset = -(256-opcode_index) * 256;
+	current_offset += MEM_WRITE_SIZE + IO_WRITE_SIZE + 6;
+	if(prefix == 0x00) current_offset += PREFIX_OPCODE_SIZE;
+
+	fprintf(func_out, "5:\n");
+	fprintf(func_out, "\t%s opcode%02X%02X - 5b + (%d)\n", bra, prefix, opcode_index, target_offset - current_offset - 2);
+}
+
 //returns gb relative SP in loc
 void get_SP(short loc)
 {
 	fprintf(func_out, "\tmove.l %%a2, %s\n", arg_table[loc]);
-	fprintf(func_out, "\tmove.w (SP_BASE, %%a5), %%d0\n");
-	fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %%d0.w), %%a1\n");
-	fprintf(func_out, "\tsub.l (%%a1), %s | sp now relative to block\n", arg_table[loc]);
-	fprintf(func_out, "\tlsl.w #5, %%d0 | d0 is now block index * 256\n");
-	fprintf(func_out, "\tadd.l %%d0, %s | sp is now correct\n", arg_table[loc]);
+	write_mem_access_patch("(SP_BASE, %a5)");
+	fprintf(func_out, "6:\n");
+	fprintf(func_out, "\tsub.l (0x7f02, %%a6), %s | sp now relative to block\n", arg_table[loc]);
+	fprintf(func_out, "\tadd.l (SP_BLOCK, %%a5), %s | sp is now correct\n", arg_table[loc]);
 }
 
 void new_SP(short loc)
 {
 	// RELATIVE SP --> ABSOULTE SP (in a2)
-	fprintf(func_out, "\tmoveq.l #0, %%d0\n");
-	fprintf(func_out, "\tmove.b %s, %%d0 | d0 is offset\n", arg_table[loc]);
-	fprintf(func_out, "\tclr.b %s\n", arg_table[loc]);
-	fprintf(func_out, "\tlsr.w #5, %s | get block index * 8\n", arg_table[loc]);
-	fprintf(func_out, "\tmove.w %s, (SP_BASE, %%a5) | store block index\n", arg_table[loc]);
-	fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %s.w), %%a1\n", arg_table[loc]);
-	fprintf(func_out, "\tmovea.l (%%a1), %%a2 | sp points to start of block\n");
-	fprintf(func_out, "\tadda.l %%d0, %%a2 | now sp is correct\n");
+	fprintf(func_out, "\t| new_SP():\n");
+	fprintf(func_out, "\tmoveq #0, %%d0\n");
+	fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[loc]);
+	fprintf(func_out, "\tswap %s\n", arg_table[loc]);
+	fprintf(func_out, "\tmove.b %s, (SP_BASE, %%a5)\n", arg_table[loc]);
+	write_mem_access_patch(arg_table[loc]);
+	fprintf(func_out, "6:\n");
+	fprintf(func_out, "\tmovea.l (0x7f02, %%a6), %%a2\n");
+	fprintf(func_out, "\tadda.l %%d0, %%a2\n");
+	fprintf(func_out, "\tswap %s\n", arg_table[loc]);
 }
 
 void new_SP_immd()
 {
 	// (%a4)+ --> ABSOULTE SP (in a2)
-	fprintf(func_out, "\tmoveq.l #0, %%d0\n");
-	fprintf(func_out, "\tmoveq.l #0, %%d2\n");
+
+	fprintf(func_out, "\t| new_SP_immd():\n");
+	fprintf(func_out, "\tmoveq #0, %%d0\n");
 	fprintf(func_out, "\tmove.b (%%a4)+, %%d0\n");
-	fprintf(func_out, "\tmove.b (%%a4)+, %%d2\n");
-	fprintf(func_out, "\tcmp.b #0xE0, %%d2 | Hack for games with stack at top of RAM\n");
+	fprintf(func_out, "\tmove.b (%%a4)+, %%d1\n");
+	fprintf(func_out, "\tcmp.b #0xE0, %%d1 | Hack for games with stack at top of RAM\n");
 	fprintf(func_out, "\tbne 0f\n");
-	fprintf(func_out, "\tsubq.b #1, %%d2\n");
+	fprintf(func_out, "\tsubq.b #1, %%d1\n");
 	fprintf(func_out, "\tmove.w #0x100, %%d0\n");
 	fprintf(func_out, "0:\n");
-	fprintf(func_out, "\tlsl.w #3, %%d2 | d2 is block index * 8\n");
-	fprintf(func_out, "\tmove.w %%d2, (SP_BASE, %%a5) | store block index\n");
-	fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %%d2.w), %%a1\n");
-	fprintf(func_out, "\tmovea.l (%%a1), %%a2 | sp points to start of block\n");
-	fprintf(func_out, "\tadda.l %%d0, %%a2 | now sp is correct\n");
+	fprintf(func_out, "\tmove.b %%d1, (SP_BASE, %%a5)\n");
+	write_mem_access_patch("%d1");
+	fprintf(func_out, "6:\n");
+	fprintf(func_out, "\tmovea.l (0x7f02, %%a6), %%a2\n");
+	fprintf(func_out, "\tadda.l %%d0, %%a2\n");
 }
 
 //assumes relative PC (word) is in D2, and that flags are set apropriately
-void new_PC()
+void new_PC_HL()
 {
-	// RELATIVE PC (in d2) --> ABSOULTE PC (in a4)
-	fprintf(func_out, "\tmoveq.l #0, %%d0\n");
-	fprintf(func_out, "\tmove.b %%d2, %%d0 | d0 is offset\n");
-	fprintf(func_out, "\tclr.b %%d2\n");
-	fprintf(func_out, "\tlsr.w #5, %%d2 | d2 is block index * 8\n");
-	fprintf(func_out, "\tmove.w %%d2, (PC_BASE, %%a5) | store block index\n");
-	fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %%d2.w), %%a1\n");
-	fprintf(func_out, "\tmovea.l (%%a1), %%a4 | pc points to start of block\n");
-	fprintf(func_out, "\tadda.l %%d0, %%a4 | now pc is correct\n");
+	fprintf(func_out, "\t| new_PC_HL():\n");
+	fprintf(func_out, "\tmoveq #0, %%d0\n");
+	fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[ARG_H]);
+	fprintf(func_out, "\tswap %s\n", arg_table[ARG_H]);
+	fprintf(func_out, "\tmove.b %s, (PC_BASE, %%a5)\n", arg_table[ARG_H]);
+	write_mem_access_patch(arg_table[ARG_H]);
+	fprintf(func_out, "6:\n");
+	fprintf(func_out, "\tmovea.l (0x7f02, %%a6), %%a4\n");
+	fprintf(func_out, "\tadda.l %%d0, %%a4\n");
+	fprintf(func_out, "\tswap %s\n", arg_table[ARG_H]);
 }
 
 //reads new PC at current PC
 void new_PC_immd(bool read_dir)
 {
-	// RELATIVE PC (in d2) --> ABSOULTE PC (in a4)
-	fprintf(func_out, "\tmoveq.l #0, %%d0\n");
-	fprintf(func_out, "\tclr.w %%d2\n");
+	fprintf(func_out, "\t| new_PC_immd():\n");
+	fprintf(func_out, "\tmoveq #0, %%d0\n");
 	if(read_dir) {
 		fprintf(func_out, "\tmove.b (%%a4)+, %%d0\n");
-		fprintf(func_out, "\tmove.b (%%a4)+, %%d2\n");
+		fprintf(func_out, "\tmove.b (%%a4), %%d1\n");
 	} else {
-		fprintf(func_out, "\tmove.b -(%%a4), %%d2\n");
+		fprintf(func_out, "\tmove.b -(%%a4), %%d1\n");
 		fprintf(func_out, "\tmove.b -(%%a4), %%d0\n");
 	}
-	fprintf(func_out, "\tlsl.w #3, %%d2 | d2 is block index * 8\n");
-	fprintf(func_out, "\tmove.w %%d2, (PC_BASE, %%a5) | store block index\n");
-	fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %%d2.w), %%a1\n");
-	fprintf(func_out, "\tmovea.l (%%a1), %%a4 | pc points to start of block\n");
-	fprintf(func_out, "\tadda.l %%d0, %%a4 | now pc is correct\n");
+	fprintf(func_out, "\tmove.b %%d1, (PC_BASE, %%a5)\n");
+	write_mem_access_patch("%d1");
+	fprintf(func_out, "6:\n");
+	fprintf(func_out, "\tmovea.l (0x7f02, %%a6), %%a4\n");
+	fprintf(func_out, "\tadda.l %%d0, %%a4\n");
 }
 
 void push_PC()
 {
-	/*ARG_FORMAT dst;
-	ARG_FORMAT src;
+	fprintf(func_out, "\tmove.l %%a4, %%d1\n");
+	write_mem_access_patch("(PC_BASE, %a5)");
+	fprintf(func_out, "6:\n");
+	fprintf(func_out, "\tsub.l (0x7f02, %%a6), %%d1 | pc now relative to block\n");
+	fprintf(func_out, "\tadd.l (PC_BLOCK, %%a5), %%d1 | pc is now correct\n");
 
-	dst.dst = true;
-	dst.prefix = PREFIX_MEM_REG_INDIR;
-	dst.prefix_tag = ARG_SP;
-	dst.tag = ARG_MEM;
-	dst.special = SPECIAL_DEC_SP;
-	dst.size = SIZE16_STACK;
-
-	src.dst = false;
-	src.prefix = NONE;
-	src.tag = ARG_DT2;*/
-	
-	fprintf(func_out, "push_PC:\n");
-	fprintf(func_out, "\tmove.l %%d2, -(%%sp)\n");
-	fprintf(func_out, "\tmove.l %%a4, %%d2\n");
-	fprintf(func_out, "\tmove.w (PC_BASE, %%a5), %%d0\n");
-	fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %%d0.w), %%a1\n");
-	fprintf(func_out, "\tsub.l (%%a1), %%d2 | pc now relative to block\n");
-	fprintf(func_out, "\tlsl.w #5, %%d0 | d0 is now block index * 256\n");
-	fprintf(func_out, "\tadd.l %%d0, %%d2 | pc is now correct\n");
-
-	fprintf(func_out, "\tlea (-2, %%a2), %%a2\n");
-	fprintf(func_out, "\tmove.b %%d2, (%%a2)\n");
-	fprintf(func_out, "\trol.w #8, %%d2\n");
-	fprintf(func_out, "\tmove.b %%d2, (%%a2, 1)\n");
-	fprintf(func_out, "\tmove.l (%%sp)+, %%d2\n");
-	fprintf(func_out, "\trts\n");
-
-
-	/*write_prefix(&dst, &src, false, TYPE_LD16);
-
-	fprintf(func_out, "\tmove.b %%d2, (%%a0, %%d0.w)\n");
-	fprintf(func_out, "\trol.w #8, %%d2\n");
-	fprintf(func_out, "\tmove.b %%d2, (1, %%a0, %%d0.w)\n");
-	fprintf(func_out, "\tmove.l (%%sp)+, %%d2\n");
-	fprintf(func_out, "\trts\n");*/
-	
-	/*fprintf(func_out, "\tmove.l %%a4, %%d1 | push PC\n");
-	fprintf(func_out, "\tsub.l %%a3, %%d1\n");
-	fprintf(func_out, "\tmove.w %s, %%a0\n", arg_table[ARG_SP]);
-	fprintf(func_out, "\tmove.b %%d1, (-2, %%a3, %%a0) | PC lsb\n");
+	fprintf(func_out, "\tsubq.l #2, %%a2\n");
+	fprintf(func_out, "\tmove.b %%d1, (%%a2)\n");
 	fprintf(func_out, "\trol.w #8, %%d1\n");
-	fprintf(func_out, "\tmove.b %%d1, (-1, %%a3, %%a0) | PC msb\n");
-	fprintf(func_out, "\tsubq.w #2, %%a0\n");
-	fprintf(func_out, "\tmove.w %%a0, %s\n", arg_table[ARG_SP]);*/
+	fprintf(func_out, "\tmove.b %%d1, (%%a2, 1)\n");
 }
 
 void pop_PC()
 {
-	/*ARG_FORMAT src;
-
-	src.dst = false;
-	src.prefix = PREFIX_MEM_REG_INDIR;
-	src.prefix_tag = ARG_SP;
-	src.special = SPECIAL_INC_SP;*/
-	
-	fprintf(func_out, "pop_PC:\n");
-	/*write_prefix(&src, 0, false, TYPE_LD16);
-	
-	fprintf(func_out, "\tclr.l %%d2\n");
-	fprintf(func_out, "\tmove.b (1, %%a0, %%d0.w), %%d2\n");
-	fprintf(func_out, "\trol.w #8, %%d2\n");
-	fprintf(func_out, "\tmove.b (%%a0, %%d0.w), %%d2\n");*/
-	fprintf(func_out, "\tmoveq.l #0, %%d0\n");
-	fprintf(func_out, "\tclr.w %%d2\n");
+	fprintf(func_out, "\tmoveq #0, %%d0\n");
 	fprintf(func_out, "\tmove.b (%%a2)+, %%d0\n");
-	fprintf(func_out, "\tmove.b (%%a2)+, %%d2\n");
-	fprintf(func_out, "\tlsl.w #3, %%d2 | d2 is block index * 8\n");
-	fprintf(func_out, "\tmove.w %%d2, (PC_BASE, %%a5) | store block index\n");
-	fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %%d2.w), %%a1\n");
-	fprintf(func_out, "\tmovea.l (%%a1), %%a4 | pc points to start of block\n");
-	fprintf(func_out, "\tadda.l %%d0, %%a4 | now pc is correct\n");
-
-	//new_PC();
-	fprintf(func_out, "\trts\n");
-	/*fprintf(func_out, "\tmove.w %s, %%a0 | pop PC\n", arg_table[ARG_SP]);
-	fprintf(func_out, "\tclr.l %%d1\n");
-	fprintf(func_out, "\tmove.b (1, %%a3, %%a0), %%d1 | msb\n");
-	fprintf(func_out, "\trol.w #8, %%d1\n");
-	fprintf(func_out, "\tmove.b (%%a3, %%a0), %%d1 | lsb\n");
-	fprintf(func_out, "\taddq.w #2, %%a0\n");
-	fprintf(func_out, "\tmove.w %%a0, %s\n", arg_table[ARG_SP]);
-	fprintf(func_out, "\tadd.l %%a3, %%d1\n");
-	fprintf(func_out, "\tmove.l %%d1, %%a4\n");*/
-}
-
-void write_mem_special_prefix(ARG_FORMAT *arg)
-{
-	//if(arg->special == SPECIAL_DEC_SP) {
-	//	fprintf(func_out, "\tsubq.w #2, %s\n", arg_table[ARG_SP]);
-	//}
-}
-
-void write_mem_special_suffix(ARG_FORMAT *arg)
-{
-	if(arg->special == SPECIAL_INC_HL) {
-		fprintf(func_out, "\taddq.w #1, %s\n", arg_table[ARG_H]);
-	} else if(arg->special == SPECIAL_DEC_HL) {
-		fprintf(func_out, "\tsubq.w #1, %s\n", arg_table[ARG_H]);
-	}// else if(arg->special == SPECIAL_INC_SP) {
-	//	fprintf(func_out, "\taddq.w #2, %s\n", arg_table[ARG_SP]);
-	//}
-}
-
-void write_false_mem(int opcode_type, ARG_FORMAT *other)
-{
-	if(opcode_type == TYPE_LD8) {
-		if(other->tag != ARG_DT2)
-			fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[other->tag]);
-	} else if(opcode_type == TYPE_LD16) {
-		if(other->tag != ARG_DT2)
-			fprintf(func_out, "\tmove.w %s, %%d2\n", arg_table[other->tag]);
-		else if(other->prefix == PREFIX_GET_AF) {
-			fprintf(func_out, "\tlsl.w #8, %%d2\n");
-			fprintf(func_out, "\tor.b %%d5, %%d2\n");
-			fprintf(func_out, "\trol.w #8, %%d2\n");
-		}
-		//will only happen for PUSH rr, or LD (nnnn), SP
-		/*if(other->prefix == PREFIX_GET_AF) {
-			fprintf(func_out, "\tjsr (%%a3, %%d1.w)\n"); //store lower byte (F), already in d2
-			fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[ARG_A]); //store upper byte
-			fprintf(func_out, "\taddq.b #1, %%d0\n");
-		} else {
-			fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[other->tag + 1]); //store lower byte
-			fprintf(func_out, "\tjsr (%%a3, %%d1.w)\n");
-			fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[other->tag]); //store upper byte
-			fprintf(func_out, "\taddq.b #1, %%d0\n");
-		}*/
-	}
+	fprintf(func_out, "\tmove.b (%%a2)+, %%d1\n");
+	fprintf(func_out, "\tmove.b %%d1, (PC_BASE, %%a5)\n");
+	write_mem_access_patch("%d1");
+	fprintf(func_out, "6:\n");
+	fprintf(func_out, "\tmovea.l (0x7f02, %%a6), %%a4\n");
+	fprintf(func_out, "\tadda.l %%d0, %%a4\n");
 }
 
 /*
@@ -580,217 +620,162 @@ Prefix register usage:
 	Input to prefix: %d3
 */
 
-/*void new_HL()
-{
-	fprintf(func_out, "\tclr.w %%d3\n");
-	fprintf(func_out, "\tmove.b %s, %%d3\n", arg_table[ARG_H]);
-	fprintf(func_out, "\tlsl.w #3, %%d3\n");
-	fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %%d3.w), %%a2\n");
-	fprintf(func_out, "\tmove.l (%%a2)+, (HL_BASE, %%a5)\n");
-	fprintf(func_out, "\tmove.w (%%a2), (HL_FUNC, %%a5)\n");
-}*/
-/*
-void new_SP()
-{
-	fprintf(func_out, "\tclr.w %%d3\n");
-	fprintf(func_out, "\tmove.b %s, %%d3\n", arg_table[ARG_SP]);
-	fprintf(func_out, "\tlsl.w #3, %%d3\n");
-	fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %%d3.w), %%a2\n");
-	fprintf(func_out, "\tmove.l (%%a2)+, (SP_BASE, %%a5)\n");
-	fprintf(func_out, "\tmove.w (%%a2), (SP_FUNC, %%a5)\n");
-}*/
-
 void write_prefix(ARG_FORMAT *arg, ARG_FORMAT *other, bool read_modify, int opcode_type)
 {
-	char lable[1024];
-	char no_carry[1024], no_zero[1024], no_subtract[1024];
+	//char lable[1024];
+	//char no_carry[1024], no_zero[1024], no_subtract[1024];
 	if(arg->prefix == PREFIX_MEM_REG_INDIR) {
-		/*if(arg->prefix_tag == ARG_H || arg->prefix_tag == ARG_SP) {
-			if(arg->special == SPECIAL_DEC_SP) {
-				fprintf(func_out, "\tsubq.b #2, %s\n", arg_table[ARG_P]);
-				fprintf(func_out, "\tbcc 0f\n");
-				fprintf(func_out, "\tsubq.b #1, %s\n", arg_table[ARG_SP]);
-				new_SP();
-				fprintf(func_out, "0:\n");
+
+		fprintf(func_out, "\tmoveq #0, %%d0\n");
+		fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[arg->prefix_tag]);
+		
+		//fprintf(func_out, "\tmove.b %s, (%%a6)\n", arg_table[arg->prefix_tag]);
+		
+		if(!arg->dst && !read_modify || arg->size == SIZE16) {
+			fprintf(func_out, "\tswap %s\n", arg_table[arg->prefix_tag]);
+			write_mem_access_patch(arg_table[arg->prefix_tag]);
+			fprintf(func_out, "\tswap %s\n", arg_table[arg->prefix_tag]);
+			fprintf(func_out, "6:\n");
+			fprintf(func_out, "\tmovea.l (0x7f02, %%a6), %%a0\n");
+			if(arg->special == SPECIAL_INC_HL) {
+				fprintf(func_out, "\text.w %s\n", arg_table[ARG_H]);
+				fprintf(func_out, "\taddq.l #1, %s\n", arg_table[ARG_H]);
+			} else if(arg->special == SPECIAL_DEC_HL) {
+				fprintf(func_out, "\text.w %s\n", arg_table[ARG_H]);
+				fprintf(func_out, "\tsubq.l #1, %s\n", arg_table[ARG_H]);
 			}
-			fprintf(func_out, "\tclr.w %%d0\n");
-			fprintf(func_out, "\tmovea.l %s, %%a0\n",
-				reg_base[arg->prefix_tag]);
-			fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[arg->prefix_tag + 1]);
-			if(arg->dst && !read_modify)
-				fprintf(func_out, "\tmove.w %s, %%d1\n", reg_func_base[arg->prefix_tag]);
-			if(arg->special == SPECIAL_INC_HL || arg->special == SPECIAL_DEC_HL
-			|| arg->special == SPECIAL_INC_SP) {
-				if(arg->special == SPECIAL_INC_HL) {
-					fprintf(func_out, "\taddq.b #1, %s\n", arg_table[ARG_L]);
-					fprintf(func_out, "\tbcc 0f\n");
-					fprintf(func_out, "\taddq.b #1, %s\n", arg_table[ARG_H]);
-					new_HL();
-				} else if(arg->special == SPECIAL_DEC_HL) {
-					fprintf(func_out, "\tsubq.b #1, %s\n", arg_table[ARG_L]);
-					fprintf(func_out, "\tbcc 0f\n");
-					fprintf(func_out, "\tsubq.b #1, %s\n", arg_table[ARG_H]);
-					new_HL();
-				} else if(arg->special == SPECIAL_INC_SP) {
-					fprintf(func_out, "\taddq.b #2, %s\n", arg_table[ARG_P]);
-					fprintf(func_out, "\tbcc 0f\n");
-					fprintf(func_out, "\taddq.b #1, %s\n", arg_table[ARG_SP]);
-					new_SP();
+		} else {
+			if(!read_modify && other->tag != ARG_DT1) {
+				if(swap_table[other->tag]) {
+					fprintf(func_out, "\tmove.l %s, %%d1\n", arg_table[other->tag]);
+					fprintf(func_out, "\tswap %%d1\n");
+				} else {
+					fprintf(func_out, "\tmove.b %s, %%d1\n", arg_table[other->tag]);
 				}
-				fprintf(func_out, "0:\n");
-				if(arg->dst && !read_modify) fprintf(func_out, "\ttst.w %%d1\n");
+				other->tag = ARG_DT1;
 			}
-		} else {*/
-			//write_mem_special_prefix(arg);
-			//if(arg->special == SPECIAL_DEC_SP)
-			//	fprintf(func_out, "\tsubq.w #2, %s\n", arg_table[ARG_SP]);
-			//if(arg->prefix_tag == ARG_SP) return; //no need for SP prefix
-			if(arg->prefix_tag != ARG_DT3)
-				fprintf(func_out, "\tmove.w %s, %%d3\n", arg_table[arg->prefix_tag]);
+			fprintf(func_out, "\tswap %s\n", arg_table[arg->prefix_tag]);
+			write_mem_access_patch(arg_table[arg->prefix_tag]);
+			fprintf(func_out, "\tswap %s\n", arg_table[arg->prefix_tag]);
+			if(arg->special == SPECIAL_INC_HL) {
+				fprintf(func_out, "\text.w %s\n", arg_table[ARG_H]);
+				fprintf(func_out, "\taddq.l #1, %s\n", arg_table[ARG_H]);
+			} else if(arg->special == SPECIAL_DEC_HL) {
+				fprintf(func_out, "\text.w %s\n", arg_table[ARG_H]);
+				fprintf(func_out, "\tsubq.l #1, %s\n", arg_table[ARG_H]);
+			}
+			
+			fprintf(func_out, "6:\n");
+			if(!read_modify) {
+				fprintf(func_out, "\tjmp (0x7f00, %%a6)\n");
+			} else {
+				fprintf(func_out, "\tlea (0x7f02, %%a6), %%a1\n");
+				fprintf(func_out, "\tmove.l (%%a1)+, %%a0\n");
+				fprintf(func_out, "\tmove.b (%%a0, %%d0.w), %%d1\n");
+				arg->tag = ARG_DT1;
+			}
 
-			if(arg->special == SPECIAL_INC_HL)
-				fprintf(func_out, "\taddq.w #1, %s\n", arg_table[ARG_H]);
-			else if(arg->special == SPECIAL_DEC_HL)
-				fprintf(func_out, "\tsubq.w #1, %s\n", arg_table[ARG_H]);
-			//else if(arg->special == SPECIAL_INC_SP)
-			//	fprintf(func_out, "\taddq.w #2, %s\n", arg_table[ARG_SP]);
+			/*fprintf(func_out, "\tlea (0x7f00, %%a6), %%a1\n");
+			
+			fprintf(func_out, "\tmove.l (%%a1)+, %%a0\n");
+			if(!read_modify) {
+				fprintf(func_out, "\tmove.w (%%a1), %%d1\n");
+				fprintf(func_out, "\tbeq 0f\n");
+				write_false_mem(opcode_type, other); //get arg into d2
+				if(arg->size == SIZE16) {
+					//fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
+					fprintf(func_out, "\tmove.l (NEXT_EVENT, %%a5), (SAVE_EVENT_MEM16, %%a5)\n");
+					fprintf(func_out, "\tmove.w %%d4, (SAVE_COUNT_MEM16, %%a5)\n");
+					fprintf(func_out, "\tmove.l #write16_finish, (NEXT_EVENT, %%a5)\n");
+					fprintf(func_out, "\tmoveq #-1, %%d4\n");
+				} //else {
+					//fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
+				//}
+				fprintf(func_out, "\tjmp (%%a3, %%d1.w)\n");
+				fprintf(func_out, "0:\n");
+			}*/
+		}
 
-			//write_mem_special_suffix(arg);
-			fprintf(func_out, "\tclr.w %%d0\n");
-			fprintf(func_out, "\tmove.b %%d3, %%d0\n");
-			fprintf(func_out, "\tclr.b %%d3\n");
-			fprintf(func_out, "\tlsr.w #5, %%d3\n");
-			fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %%d3.w), %%a1\n");
-			fprintf(func_out, "\tmovea.l (%%a1)+, %%a0\n");
-			if(arg->dst && !read_modify) fprintf(func_out, "\tmove.w (%%a1), %%d1\n");
-		//}
-		if(arg->dst && !read_modify) { //check for special write
-			get_lable(lable);
-			fprintf(func_out, "\tbeq %s\n", lable); //no special write
-			write_false_mem(opcode_type, other); //get arg into d2
-			if(arg->size == SIZE16) {
-				fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-				fprintf(func_out, "\tmove.l (NEXT_EVENT, %%a5), (SAVE_EVENT_MEM16, %%a5)\n");
-				fprintf(func_out, "\tmove.w %%d4, (SAVE_COUNT_MEM16, %%a5)\n");
-				fprintf(func_out, "\tmove.l #write16_finish, (NEXT_EVENT, %%a5)\n");
-				fprintf(func_out, "\tmoveq #-1, %%d4\n");
-				/*if(arg->prefix_tag == ARG_H) { //d3 needs to be set
-					fprintf(func_out, "\tclr.w %%d3\n");
-					fprintf(func_out, "\tmove.b (GB_H, %%a5), %%d3\n");
-					fprintf(func_out, "\tlsl.w #3, %%d3\n");
-				} else if(arg->prefix_tag == ARG_SP) {
-					fprintf(func_out, "\tclr.w %%d3\n");
-					fprintf(func_out, "\tmove.b (GB_SP, %%a5), %%d3\n");
-					fprintf(func_out, "\tlsl.w #3, %%d3\n");
-				}*/
-			} else if(arg->size == SIZE16_STACK) {
-				fprintf(func_out, "\tmove.l (NEXT_EVENT, %%a5), (SAVE_EVENT_MEM16, %%a5)\n");
-				fprintf(func_out, "\tmove.w %%d4, (SAVE_COUNT_MEM16, %%a5)\n");
-				fprintf(func_out, "\tmove.l #write16_stack_finish, (NEXT_EVENT, %%a5)\n");
-				fprintf(func_out, "\tmoveq #-1, %%d4\n");
-				/*if(arg->prefix_tag == ARG_SP) {
-					fprintf(func_out, "\tclr.w %%d3\n");
-					fprintf(func_out, "\tmove.b (GB_SP, %%a5), %%d3\n");
-					fprintf(func_out, "\tlsl.w #3, %%d3\n");
-				}*/
-			} else
-				fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-			fprintf(func_out, "\tjmp (%%a3, %%d1.w)\n");
-			fprintf(func_out, "%s:\n", lable);
-		}
-		if(read_modify) {
-			fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[arg->tag]);
-			arg->tag = ARG_DT2;
-		}
-	} else if(arg->prefix == PREFIX_MEM_IMMD_INDIR) {
+		/*if(arg->prefix_tag != ARG_DT3)
+			fprintf(func_out, "\tmove.w %s, %%d3\n", arg_table[arg->prefix_tag]);
+
 		fprintf(func_out, "\tclr.w %%d0\n");
-		fprintf(func_out, "\tclr.w %%d3\n");
-		fprintf(func_out, "\tmove.b (%%a4)+, %%d0\n");
-		fprintf(func_out, "\tmove.b (%%a4)+, %%d3\n");
-		fprintf(func_out, "\tlsl.w #3, %%d3\n");
+		fprintf(func_out, "\tmove.b %%d3, %%d0\n");
+		fprintf(func_out, "\tclr.b %%d3\n");
+		fprintf(func_out, "\tlsr.w #5, %%d3\n");
 		fprintf(func_out, "\tlea (MEM_TABLE, %%a5, %%d3.w), %%a1\n");
 		fprintf(func_out, "\tmovea.l (%%a1)+, %%a0\n");
-		if(arg->dst && !read_modify) {
-			get_lable(lable);
-			fprintf(func_out, "\tmove.w (%%a1), %%d1\n");
-			fprintf(func_out, "\tbeq %s\n", lable);
-			
-			write_false_mem(opcode_type, other);
-			
-			if(arg->size == SIZE16) {
-				fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-				fprintf(func_out, "\tmove.l (NEXT_EVENT, %%a5), (SAVE_EVENT_MEM16, %%a5)\n");
-				fprintf(func_out, "\tmove.w %%d4, (SAVE_COUNT_MEM16, %%a5)\n");
-				fprintf(func_out, "\tmove.l #write16_finish, (NEXT_EVENT, %%a5)\n");
-				fprintf(func_out, "\tmoveq #-1, %%d4\n");
-			} else if(arg->size == SIZE16_STACK) {
-				fprintf(func_out, "\tmove.l (NEXT_EVENT, %%a5), (SAVE_EVENT_MEM16, %%a5)\n");
-				fprintf(func_out, "\tmove.w %%d4, (SAVE_COUNT_MEM16, %%a5)\n");
-				fprintf(func_out, "\tmove.l #write16_stack_finish, (NEXT_EVENT, %%a5)\n");
-				fprintf(func_out, "\tmoveq #-1, %%d4\n");
-			} else
-				fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-				
-			fprintf(func_out, "\tjmp (%%a3, %%d1.w)\n");
-			fprintf(func_out, "%s:\n", lable);
-		}
-		if(read_modify) {
-			fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[arg->tag]);
-			arg->tag = ARG_DT2;
+		if(arg->dst && !read_modify) fprintf(func_out, "\tmove.w (%%a1), %%d1\n");*/
+
+		//if(read_modify) {
+		//	fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[arg->tag]);
+		//	arg->tag = ARG_DT2;
+		//}
+	} else if(arg->prefix == PREFIX_MEM_IMMD_INDIR) {
+		fprintf(func_out, "\tmoveq #0, %%d0\n");
+		fprintf(func_out, "\tmove.b (%%a4)+, %%d0\n");
+		
+		//fprintf(func_out, "\tmove.b %s, (%%a6)\n", arg_table[arg->prefix_tag]);
+		
+		if(!arg->dst && !read_modify || arg->size == SIZE16) {
+			write_mem_access_patch("(%a4)+");
+			fprintf(func_out, "6:\n");
+			fprintf(func_out, "\tmovea.l (0x7f02, %%a6), %%a0\n");
+		} else {
+			if(!read_modify && other->tag != ARG_DT1) {
+				if(swap_table[other->tag]) {
+					fprintf(func_out, "\tmove.l %s, %%d1\n", arg_table[other->tag]);
+					fprintf(func_out, "\tswap %%d1\n");
+				} else {
+					fprintf(func_out, "\tmove.b %s, %%d1\n", arg_table[other->tag]);
+				}
+				other->tag = ARG_DT1;
+			}
+
+			write_mem_access_patch("(%a4)+");
+			fprintf(func_out, "6:\n");
+
+			if(!read_modify) {
+				fprintf(func_out, "\tjmp (0x7f00, %%a6)\n");
+			} else {
+				fprintf(func_out, "\tlea (0x7f02, %%a6), %%a1\n");
+				fprintf(func_out, "\tmove.l (%%a1)+, %%a0\n");
+				fprintf(func_out, "\tmove.b (%%a0, %%d0.w), %%d1\n");
+				arg->tag = ARG_DT1;
+			}
 		}
 	} else if(arg->prefix == PREFIX_MEM_FF00) {
-		fprintf(func_out, "\tclr.w %%d0\n");
+		fprintf(func_out, "\tmoveq #0, %%d0\n");
 		fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[arg->prefix_tag]);
-		fprintf(func_out, "\tmovea.l (MEM_TABLE+2040, %%a5), %%a0\n");
+		fprintf(func_out, "\tmovea.l (-1*256+2, %%a6), %%a0\n");
+		
 		if(arg->dst) {
-			fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-			write_false_mem(opcode_type, other);
-			fprintf(func_out, "\tmove.w %%d0, %%d1\n");
-			fprintf(func_out, "\tadd.w %%d1, %%d1\n");
-			fprintf(func_out, "\tlea io_write_table:l, %%a1\n");
-			fprintf(func_out, "\tmovea.w (%%a1, %%d1.w), %%a1\n");
-			fprintf(func_out, "\tjmp (%%a3, %%a1.w)\n");
+			fprintf(func_out, "\tmove.b %%d5, %%d1\n");
+			//fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
+			write_mem_access_patch("%d0");
+			fprintf(func_out, "6:\n");
+			fprintf(func_out, "\tjmp (0x7f%02X, %%a6)\n", 6 + MEM_WRITE_SIZE);
 		}
 	} else if(arg->prefix == PREFIX_SP_IMMD) {
-		get_SP(ARG_DT2);
-		fprintf(func_out, "\tmove.b %s, %%d1\n", arg_table[ARG_IMMD8]);
-		fprintf(func_out, "\text.w %%d1\n");
-		//FLAG START
-#ifdef ACCURATE_HALF_CARRY
-		fprintf(func_out, "\tmove.w %%d1, (LAST_SRC, %%a5)\n");
-		fprintf(func_out, "\tmove.w %%d2, (LAST_DST, %%a5)\n", arg_table[ARG_SP]);
-#endif
-		//FLAG END
-		fprintf(func_out, "\tadd.w %%d1, %%d2\n");
-		//FLAG START
-		update_carry_flag();
-		fprintf(func_out, "\tmove.b #0x40, %%d7 | set 16 bit add, clear subtract/zero flag\n");
-		//FLAG END
+		get_SP(ARG_DT1);
+		fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[ARG_IMMD8]);
+		fprintf(func_out, "\text.w %%d0\n");
+		updateC_clearZ_fast("\tadd.w %%d0, %%d1\n");
 	} else if(arg->prefix == PREFIX_GET_IMMD16) {
-		fprintf(func_out, "\tmove.b (%%a4, 1), %%d2\n");
-		fprintf(func_out, "\trol.w #8, %%d2\n");
-		fprintf(func_out, "\tmove.b (%%a4), %%d2\n");
+		fprintf(func_out, "\tmove.b (%%a4, 1), %%d1\n");
+		fprintf(func_out, "\trol.w #8, %%d1\n");
+		fprintf(func_out, "\tmove.b (%%a4), %%d1\n");
 		fprintf(func_out, "\taddq.w #2, %%a4\n");
 	} else if(arg->prefix == PREFIX_GET_AF) {
-		get_lable(no_carry); get_lable(no_zero); get_lable(no_subtract);
-		fprintf(func_out, "\tclr.b %%d2\n");
-		fprintf(func_out, "\tbtst.b #0, %%d6\n");
-		fprintf(func_out, "\tbeq %s\n", no_carry);
-		fprintf(func_out, "\tbset #4, %%d2 | set gb carry\n");
-		fprintf(func_out, "%s:\n", no_carry);
-
-		fprintf(func_out, "\tbtst.b #2, %%d7\n");
-		fprintf(func_out, "\tbeq %s\n", no_zero);
-		fprintf(func_out, "\tbset #7, %%d2 | set gb zero\n");
-		fprintf(func_out, "%s:\n", no_zero);
-
-		fprintf(func_out, "\tbtst.b #5, %%d7\n");
-		fprintf(func_out, "\tbeq %s\n", no_subtract);
-		fprintf(func_out, "\tbset #6, %%d2 | set gb subtract\n");
-		fprintf(func_out, "%s:\n", no_subtract);
-#ifdef ACCURATE_HALF_CARRY
-		fprintf(func_out, "\tjsr calculate_half_carry :l\n");
-#endif
+		fprintf(func_out, "\tmoveq #0, %%d0\n");
+		fprintf(func_out, "\tbtst #0, %%d6\n");
+		fprintf(func_out, "\tbeq 0f\n");
+		fprintf(func_out, "\tori.b #0x10, %%d0 | set gb carry\n");
+		fprintf(func_out, "0:\n");
+		fprintf(func_out, "\tbtst #2, %%d6\n");
+		fprintf(func_out, "\tbeq 0f\n");
+		fprintf(func_out, "\tori.b #0x80, %%d0 | set gb zero\n");
+		fprintf(func_out, "0:\n");
 	} else if(arg->prefix == PREFIX_GET_SP && !arg->dst) {
 		get_SP(arg->tag);
 	}
@@ -798,22 +783,16 @@ void write_prefix(ARG_FORMAT *arg, ARG_FORMAT *other, bool read_modify, int opco
 
 void write_suffix(ARG_FORMAT *arg)
 {
-	char lable[1024];
-
 	if(arg->prefix == PREFIX_MEM_REG_INDIR && arg->dst) {
-		get_lable(lable);
-		//if(arg->prefix_tag == ARG_H) fprintf(func_out, "\tmove.w (HL_FUNC, %%a5), %%d1\n");
-		//else if(arg->prefix_tag == ARG_SP) fprintf(func_out, "\tmove.w (SP_FUNC, %%a5), %%d1\n");
-		//else
-		fprintf(func_out, "\tmove.w (%%a1), %%d1\n");
-
-		fprintf(func_out, "\tbeq %s\n", lable);
-		fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-		fprintf(func_out, "\tjmp (%%a3, %%d1.w)\n");
-		fprintf(func_out, "%s:\n", lable);
-		fprintf(func_out, "\tmove.b %%d2, (%%a0, %%d0.w)\n");
+		fprintf(func_out, "\tjmp (%%a1)\n");
+		//get_lable(lable);
+		//fprintf(func_out, "\tmove.w (%%a1), %%d1\n");
+		//fprintf(func_out, "\tbeq %s\n", lable);
+		//fprintf(func_out, "\tjmp (%%a3, %%d1.w)\n");
+		//fprintf(func_out, "%s:\n", lable);
+		//fprintf(func_out, "\tmove.b %%d2, (%%a0, %%d0.w)\n");
 	} else if(arg->prefix == PREFIX_GET_SP && arg->dst) {
-		new_SP(arg->tag);
+		new_SP(ARG_H);//arg->tag); //hack...
 	}
 }
 
@@ -829,34 +808,77 @@ void write_suffix(ARG_FORMAT *arg)
 
 bool write_LD8(ARG_FORMAT *src, ARG_FORMAT *dst)
 {
-	if(src->tag == dst->tag) return false;
+	if(src->name == OP_HL_INDIR && dst->name == OP_HL_INDIR) return false;
+	
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
+	if(src->tag == dst->tag) {
+		//fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
+		//next_instruction();
+		return true;
+	}
 	write_prefix(src, dst, false, TYPE_LD8);
 	write_prefix(dst, src, false, TYPE_LD8);
-	if(dst->prefix != PREFIX_MEM_FF00) {
-		fprintf(func_out, "\tmove.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+	if(dst->prefix == NONE) {
+		if(src->prefix == NONE) {
+			if(strcmp(arg_table[src->tag], arg_table[dst->tag]) == 0 && swap_table[src->tag]) { //high to low
+				fprintf(func_out, "\tmove.l %s, %%d0\n", arg_table[src->tag]);
+				fprintf(func_out, "\tswap %%d0\n");
+				fprintf(func_out, "\tmove.b %%d0, %s\n", arg_table[dst->tag]);
+			} else if(strcmp(arg_table[src->tag], arg_table[dst->tag]) == 0 && swap_table[dst->tag]) { //low to high
+				fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[src->tag]);
+				fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+				fprintf(func_out, "\tmove.b %%d0, %s\n", arg_table[dst->tag]);
+			} else if(swap_table[dst->tag] && swap_table[src->tag]) {
+				fprintf(func_out, "\tmove.l %s, %%d0\n", arg_table[src->tag]);
+				fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[dst->tag]);
+				fprintf(func_out, "\tmove.l %%d0, %s\n", arg_table[dst->tag]);
+			} else if(!swap_table[dst->tag] && !swap_table[src->tag]) {
+				fprintf(func_out, "\tmove.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+			} else if(!swap_table[dst->tag] && swap_table[src->tag]) {
+				fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+				fprintf(func_out, "\tmove.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+				fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+			} else if(swap_table[dst->tag] && !swap_table[src->tag]) {
+				fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+				fprintf(func_out, "\tmove.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+				fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+			}
+		} else {
+			if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+			fprintf(func_out, "\tmove.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+			if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+		}
 		//if(dst->tag == ARG_H) new_HL();
-		fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-		next_instruction();
+		//fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
+		//next_instruction();
 	}
 	return true;
 }
 
 bool write_LD16(ARG_FORMAT *src, ARG_FORMAT *dst)
 {	
-	if(src->tag == dst->tag && src->prefix == dst->prefix) return false;
 	dst->size = SIZE16;
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
+	if(src->tag == dst->tag && src->prefix == dst->prefix) {
+		return true;
+	}
 
 	if(src->prefix == PREFIX_GET_IMMD16) {
 		//SPECIAL CASE...prefix_get_immd16 generates poor code here
-		if(dst->prefix == PREFIX_GET_SP) new_SP_immd();
-		else {
-			fprintf(func_out, "\tmove.b (%%a4)+, %s\n", arg_table[dst->tag + 1]);
+		if(dst->prefix == PREFIX_GET_SP) {
+			new_SP_immd();
+		} else {
 			fprintf(func_out, "\tmove.b (%%a4)+, %s\n", arg_table[dst->tag]);
+			fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+			fprintf(func_out, "\tmove.b (%%a4)+, %s\n", arg_table[dst->tag]);
+			fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 		}
-		fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-		next_instruction();
+		
+		return true;
+	} else if(dst->prefix == PREFIX_GET_SP) {
+		//this will handle the LD SP, HL instruction (that's all)
+		new_SP(src->tag);
+
 		return true;
 	}
 
@@ -869,20 +891,21 @@ bool write_LD16(ARG_FORMAT *src, ARG_FORMAT *dst)
 			fprintf(func_out, "\trol.w #8, %s\n", arg_table[src->tag]);
 			fprintf(func_out, "\tmove.b %s, (1, %%a0, %%d0.w)\n", arg_table[src->tag]);
 		} else {
+			fprintf(func_out, "\tmove.b %s, (%%a0, %%d0.w)\n", arg_table[src->tag]);
+			fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
 			fprintf(func_out, "\tmove.b %s, (1, %%a0, %%d0.w)\n", arg_table[src->tag]);
-			fprintf(func_out, "\tmove.b %s, (%%a0, %%d0.w)\n", arg_table[src->tag + 1]);
 		}
-	} else if(src->tag == ARG_MEM) { //handle proper endianess
-		fprintf(func_out, "\tmove.b (1, %%a0, %%d0.w), %s\n", arg_table[dst->tag]);
-		fprintf(func_out, "\tmove.b (%%a0, %%d0.w), %s\n", arg_table[dst->tag + 1]);
+	} else if(src->prefix == PREFIX_SP_IMMD) {
+		fprintf(func_out, "\tmove.b %%d1, %s\n", arg_table[dst->tag]);
+		fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+		fprintf(func_out, "\trol.w #8, %%d1\n");
+		fprintf(func_out, "\tmove.b %%d1, %s\n", arg_table[dst->tag]);
+		fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	} else {
-		fprintf(func_out, "\tmove.w %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+		fprintf(func_out, "\tmove.l %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
 	}
-	//if(dst->tag == ARG_H) new_HL();
-	//else if(dst->tag == ARG_SP) new_SP();
 	write_suffix(dst);
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+
 	return true;
 }
 
@@ -892,54 +915,41 @@ bool write_PUSH(ARG_FORMAT *dst)
 	write_prefix(dst, 0, false, TYPE_LD16);
 	if(dst->prefix == PREFIX_GET_AF) {
 		fprintf(func_out, "\tmove.b %%d5, -(%%a2)\n");
-		fprintf(func_out, "\tmove.b %%d2, -(%%a2)\n");
+		fprintf(func_out, "\tmove.b %%d0, -(%%a2)\n");
 	} else {
+		fprintf(func_out, "\tmove.l %s, %%d0\n", arg_table[dst->tag]);
+		fprintf(func_out, "\tswap %%d0\n");
+		fprintf(func_out, "\tmove.b %%d0, -(%%a2)\n");
 		fprintf(func_out, "\tmove.b %s, -(%%a2)\n", arg_table[dst->tag]);
-		fprintf(func_out, "\tmove.b %s, -(%%a2)\n", arg_table[dst->tag + 1]);
 	}
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+
 	return true;
 }
 
 bool write_POP(ARG_FORMAT *dst)
 {
-	char no_half_carry[1024], test_zero[1024], no_subtract[1024];
+	//char no_half_carry[1024], test_zero[1024], no_subtract[1024];
 	
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	if(dst->prefix == PREFIX_GET_AF) {
-		get_lable(no_half_carry);
-		get_lable(test_zero);
-		get_lable(no_subtract);
-		fprintf(func_out, "\tmove.b (%%a2)+, %%d2 | restore flags\n");
+		fprintf(func_out, "\tmove.b (%%a2)+, %%d0 | restore flags\n");
 		fprintf(func_out, "\tmove.b (%%a2)+, %%d5\n");
-		fprintf(func_out, "\tbtst.l #4, %%d2\n");
-		fprintf(func_out, "\tsne %%d1\n");
-		fprintf(func_out, "\tadd.b %%d1, %%d1\n");
-		fprintf(func_out, "\tmove.w %%sr, %%d6\n");
-#ifdef ACCURATE_HALF_CARRY
-		fprintf(func_out, "\tbtst.l #5, %%d2\n");
-		fprintf(func_out, "\tbeq %s\n", no_half_carry);
-		set_half_carry_flag();
-		fprintf(func_out, "\tbra %s\n", test_zero);
-		fprintf(func_out, "%s:\n", no_half_carry);
-		clear_half_carry_flag();
-#endif
-		fprintf(func_out, "%s:\n", test_zero);
-		fprintf(func_out, "\tbtst.l #7, %%d2\n");
-		fprintf(func_out, "\tseq %%d1\n");
-		fprintf(func_out, "\ttst.b %%d1\n");
-		fprintf(func_out, "\tmove.w %%sr, %%d7\n");
-		fprintf(func_out, "\tbtst.l #6, %%d2\n");
-		fprintf(func_out, "\tbeq %s\n", no_subtract);
-		set_subtract_flag();
-		fprintf(func_out, "%s:\n", no_subtract);
+		fprintf(func_out, "\tmoveq #0, %%d6\n");
+		fprintf(func_out, "\tbtst #7, %%d0\n");
+		fprintf(func_out, "\tbeq 0f\n");
+		fprintf(func_out, "\tori #0x04, %%d6 | set zero\n");
+		fprintf(func_out, "0:\n");
+		fprintf(func_out, "\tbtst #4, %%d0\n");
+		fprintf(func_out, "\tbeq 0f\n");
+		fprintf(func_out, "\tori.b #0x01, %%d6 | set carry\n");
+		fprintf(func_out, "0:\n");
 	} else {
-		fprintf(func_out, "\tmove.b (%%a2)+, %s\n", arg_table[dst->tag + 1]);
 		fprintf(func_out, "\tmove.b (%%a2)+, %s\n", arg_table[dst->tag]);
+		fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+		fprintf(func_out, "\tmove.b (%%a2)+, %s\n", arg_table[dst->tag]);
+		fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	}
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+
 	return true;
 }
 
@@ -948,17 +958,12 @@ bool write_ADD(ARG_FORMAT *src, ARG_FORMAT *dst)
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(src, dst, false, 0);
 	write_prefix(dst, src, false, 0);
-	//FLAG START
-	fprintf(func_out, "\tmove.b %s, (LAST_SRC, %%a5)\n", arg_table_static[src->tag]);
-	fprintf(func_out, "\tmove.b %s, (LAST_DST, %%a5)\n", arg_table_static[dst->tag]);
-	//FLAG END
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+	fprintf(func_out, "\tmove.b %%d5, %%d6\n");
+	fprintf(func_out, "\tswap %%d6\n");
 	fprintf(func_out, "\tadd.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
-	//FLAG START
-	update_zero_flag();
-	update_carry_flag();
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	updateZC();
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
 	return true;
 }
 
@@ -967,24 +972,18 @@ bool write_ADC(ARG_FORMAT *src, ARG_FORMAT *dst)
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(src, dst, false, 0);
 	write_prefix(dst, src, false, 0);
-	if(src->tag != ARG_DT0)
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+	if(src->prefix != NONE || src->tag == ARG_IMMD8) {
 		fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[src->tag]); //get src in d0
-	fprintf(func_out, "\tbtst #0, %%d6\n"); //test carry flag
-	fprintf(func_out, "\tsne %%d1\n"); //if it's set, set d1 (to -1)
-	//FLAG START
-	fprintf(func_out, "\tmove.b %%d0, (LAST_SRC, %%a5)\n");
-	fprintf(func_out, "\tmove.b %s, (LAST_DST, %%a5)\n", arg_table_static[dst->tag]);
-	fprintf(func_out, "\tmove.b %%d1, (LAST_FLAG, %%a5)\n");
-	//FLAG END
-	fprintf(func_out, "\tadd.b %%d1, %%d1 | carry to extend\n");
-	fprintf(func_out, "\taddx.b %%d0, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_zero_flag();
-	update_carry_flag();
-	fprintf(func_out, "\tori.b #0x80, %%d7\n");
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+		src->tag = ARG_DT0;
+	}
+	carry_to_extend();
+	fprintf(func_out, "\tmove.b %%d5, %%d6\n");
+	fprintf(func_out, "\tswap %%d6\n");
+	fprintf(func_out, "\teor.b %%d1, %%d1 | addx doesn't set zero flag, only clears it\n");
+	fprintf(func_out, "\taddx.b %s, %%d5\n", arg_table[src->tag]);
+	updateZC();
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
 	return true;
 }
 
@@ -993,18 +992,12 @@ bool write_SUB(ARG_FORMAT *src, ARG_FORMAT *dst)
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(src, dst, false, 0);
 	write_prefix(dst, src, false, 0);
-	//FLAG START
-	fprintf(func_out, "\tmove.b %s, (LAST_SRC, %%a5)\n", arg_table_static[src->tag]);
-	fprintf(func_out, "\tmove.b %s, (LAST_DST, %%a5)\n", arg_table_static[dst->tag]);
-	//FLAG END
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+	fprintf(func_out, "\tmove.b %%d5, %%d6\n");
+	fprintf(func_out, "\tswap %%d6\n");
 	fprintf(func_out, "\tsub.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
-	//FLAG START
-	update_zero_flag();
-	update_carry_flag();
-	set_subtract_flag();
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	updateZC();
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
 	return true;
 }
 
@@ -1013,24 +1006,18 @@ bool write_SBC(ARG_FORMAT *src, ARG_FORMAT *dst)
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(src, dst, false, 0);
 	write_prefix(dst, src, false, 0);
-	if(src->tag != ARG_DT0)
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+	if(src->prefix != NONE || src->tag == ARG_IMMD8) {
 		fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[src->tag]); //get src in d0
-	fprintf(func_out, "\tbtst.b #0, %%d6\n"); //test carry flag
-	fprintf(func_out, "\tsne %%d1\n"); //if it's set, set d1 (to -1)
-	//FLAG START
-	fprintf(func_out, "\tmove.b %%d0, (LAST_SRC, %%a5)\n");
-	fprintf(func_out, "\tmove.b %s, (LAST_DST, %%a5)\n", arg_table_static[dst->tag]);
-	fprintf(func_out, "\tmove.b %%d1, (LAST_FLAG, %%a5)\n");
-	//FLAG END
-	fprintf(func_out, "\tadd.b %%d1, %%d1 | carry to extend\n");
-	fprintf(func_out, "\tsubx.b %%d0, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_zero_flag();
-	update_carry_flag();
-	fprintf(func_out, "\tori.b #0xA0, %%d7 | set subtract, specify carry\n");
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+		src->tag = ARG_DT0;
+	}
+	carry_to_extend();
+	fprintf(func_out, "\tmove.b %%d5, %%d6\n");
+	fprintf(func_out, "\tswap %%d6\n");
+	fprintf(func_out, "\teor.b %%d1, %%d1 | subx doesn't set zero flag, only clears it\n");
+	fprintf(func_out, "\tsubx.b %s, %%d5\n", arg_table[src->tag]);
+	updateZC();
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
 	return true;
 }
 
@@ -1039,14 +1026,10 @@ bool write_AND(ARG_FORMAT *src, ARG_FORMAT *dst)
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(src, dst, false, 0);
 	write_prefix(dst, src, false, 0);
-	fprintf(func_out, "\tand.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
-	//FLAG START
-	update_zero_flag();
-	clear_carry_flag();
-	set_half_carry_flag();
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+	//fprintf(func_out,
+	updateZ_clearC("\tand.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
 	return true;
 }
 
@@ -1055,36 +1038,30 @@ bool write_OR(ARG_FORMAT *src, ARG_FORMAT *dst)
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(src, dst, false, 0);
 	write_prefix(dst, src, false, 0);
-	fprintf(func_out, "\tor.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
-	//FLAG START
-	update_zero_flag();
-	clear_carry_flag();
-	clear_half_carry_flag();
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+	updateZ_clearC("\tor.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
 	return true;
 }
 
 bool write_XOR(ARG_FORMAT *src, ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
+	if(src->tag == ARG_A) {
+		fprintf(func_out, "\tclr.b %%d5\n");
+		updateZC();
+		return true;
+	}
+
 	write_prefix(src, dst, false, 0);
 	write_prefix(dst, src, false, 0);
-	if(src->tag == ARG_A) {
-		fprintf(func_out, "\teor.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
-	} else {
-		//because m68k eor instruction is stupid
-		fprintf(func_out, "\tmove.b %s, %%d1\n", arg_table[src->tag]); 
-		fprintf(func_out, "\teor.b %%d1, %s\n", arg_table[dst->tag]);
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+	if(src->prefix != NONE || src->tag == ARG_IMMD8) {
+		fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[src->tag]);
+		src->tag = ARG_DT0;
 	}
-	//FLAG START
-	update_zero_flag();
-	clear_carry_flag();
-	clear_half_carry_flag();
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	updateZ_clearC("\teor.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
 	return true;
 }
 
@@ -1094,22 +1071,12 @@ bool write_CP(ARG_FORMAT *src, ARG_FORMAT *dst)
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(src, dst, false, 0);
 	write_prefix(dst, src, false, 0);
-	//FLAG START
-#ifdef ACCURATE_HALF_CARRY
-	fprintf(func_out, "\tmove.b %s, (LAST_SRC, %%a5)\n", arg_table_static[src->tag]);
-	fprintf(func_out, "\tmove.b %s, (LAST_DST, %%a5)\n", arg_table_static[dst->tag]);
-#endif
-	//FLAG END
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
 	fprintf(func_out, "\tcmp.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
 	//FLAG START
-	update_zero_flag();
-	update_carry_flag();
-#ifdef ACCURATE_HALF_CARRY
-	set_subtract_flag();
-#endif
+	updateZC();
 	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	if(swap_table[src->tag]) fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
 	return true;
 }
 
@@ -1117,20 +1084,10 @@ bool write_INC(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, 0, true, 0);
-	//FLAG START
-#ifdef ACCURATE_HALF_CARRY
-	fprintf(func_out, "\tmove.b #1, (LAST_SRC, %%a5)\n");
-	fprintf(func_out, "\tmove.b %s, (LAST_DST, %%a5)\n", arg_table_static[dst->tag]);
-#endif
-	//FLAG END
-	fprintf(func_out, "\taddq.b #1, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_zero_flag();
-	//FLAG END
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+	updateZ("\taddq.b #1, %s\n", arg_table[dst->tag]);
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	return true;
 }
 
@@ -1138,23 +1095,10 @@ bool write_DEC(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, 0, true, 0);
-	//FLAG START
-#ifdef ACCURATE_HALF_CARRY
-	fprintf(func_out, "\tmove.b #1, (LAST_SRC, %%a5)\n");
-	fprintf(func_out, "\tmove.b %s, (LAST_DST, %%a5)\n", arg_table_static[dst->tag]);
-#endif
-	//FLAG END
-	fprintf(func_out, "\tsubq.b #1, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_zero_flag();
-#ifdef ACCURATE_HALF_CARRY
-	set_subtract_flag();
-#endif
-	//FLAG END
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+	updateZ("\tsubq.b #1, %s\n", arg_table[dst->tag]);
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	return true;
 }
 
@@ -1162,94 +1106,34 @@ bool write_CPL()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	fprintf(func_out, "\tnot.b %s\n", arg_table[ARG_A]);
-	//FLAG START
-#ifdef ACCURATE_HALF_CARRY
-	set_half_carry_flag();
-	set_subtract_flag();
-#endif
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
 	return true;
 }
 
 bool write_CCF()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tnot.b %%d6\n");
-#ifdef ACCURATE_HALF_CARRY
-	clear_half_carry_flag();
-	clear_subtract_flag();
-#endif
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	fprintf(func_out, "\teori.b #0x01, %%d6\n");
 	return true;
 }
 
 bool write_SCF()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tst %%d6\n");
-#ifdef ACCURATE_HALF_CARRY
-	clear_half_carry_flag();
-	clear_subtract_flag();
-#endif
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	fprintf(func_out, "\tori.b #0x01, %%d6\n");
 	return true;
 }
 
 bool write_DI()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tbclr #31, %%d7\n");
-	fprintf(func_out, "\tmove.l (NEXT_EVENT, %%a5), %%a0\n");
-	fprintf(func_out, "\tcmpa.l #enable_intr_func, %%a0\n");
-	fprintf(func_out, "\tbne 0f\n");
-	fprintf(func_out, "\tmove.l (SAVE_EVENT_EI, %%a5), (NEXT_EVENT, %%a5)\n");
-	fprintf(func_out, "\tmove.w (SAVE_COUNT_EI, %%a5), %%d4\n");
-	fprintf(func_out, "0:\n");
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	fprintf(func_out, "\tclr.b (IME, %%a5)\n");
 	return true;
-}
-
-void enable_intr()
-{
-	char lable[128];
-
-	get_lable(lable);
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	fprintf(func_out, "\tmovea.l (NEXT_EVENT, %%a5), %%a0\n");
-	fprintf(func_out, "\tcmpa.l #enable_intr_func, %%a0\n");
-	fprintf(func_out, "\tbne %s\n", lable);
-	fprintf(func_out, "\ttst.w %%d4\n");
-	next_instruction2(lable);
-	fprintf(func_out, "%s:\n", lable);
-	fprintf(func_out, "\tmove.w %%d4, (SAVE_COUNT_EI, %%a5)\n");
-	fprintf(func_out, "\tmove.l (NEXT_EVENT, %%a5), (SAVE_EVENT_EI, %%a5)\n");
-	fprintf(func_out, "\tmove.l #enable_intr_func, (NEXT_EVENT, %%a5)\n");
-	fprintf(func_out, "\tmoveq #0, %%d4\n");
-	
-	/*fprintf(func_out, "\tmovea.l (MEM_TABLE+2040, %%a5) ,%%a0\n");
-	fprintf(func_out, "\tbset #31, %%d7 | enable interrupts\n");
-	fprintf(func_out, "\tcmp.b #1, (CPU_HALT, %%a5)\n"); //was a halt pending?
-	fprintf(func_out, "\tbne 0f\n");
-	fprintf(func_out, "\tmove.b (IF, %%a0), %%d0\n");
-	fprintf(func_out, "\tand.b (IE, %%a0), %%d0\n");
-	fprintf(func_out, "\tbne 0f\n"); //don't bother halting if there's an intr waiting
-	fprintf(func_out, "\tmoveq #-1, %%d4\n");
-	fprintf(func_out, "\tmove.b #-1, (CPU_HALT, %%a5)\n");
-	fprintf(func_out, "0:\n");
-	fprintf(func_out, "\tjsr check_interrupts\n");*/
 }
 
 bool write_EI()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	enable_intr();
-	//fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	fprintf(func_out, "\tjmp (ei_function-function_base, %%a3)\n");
 	return true;
 }
 
@@ -1259,78 +1143,58 @@ bool write_ADD16(ARG_FORMAT *src, ARG_FORMAT *dst)
 	if(dst->prefix == PREFIX_GET_SP) { //HACK!! (doesn't set flags right...)
 		fprintf(func_out, "\tmove.b (%%a4)+, %%d0\n");
 		fprintf(func_out, "\text.w %%d0\n");
-		fprintf(func_out, "\text.l %%d0\n");
 		fprintf(func_out, "\tadda.l %%d0, %%a2\n");
-		fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-		next_instruction();
-		return true;
+	} else {
+		if(src->prefix == PREFIX_GET_SP) {
+			get_SP(ARG_DT0);
+			fprintf(func_out, "\tadd.b %%d0, %s\n", arg_table[dst->tag]);
+			fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+			fprintf(func_out, "\trol.w #8, %%d0\n");
+			updateC("\taddx.b %%d0, %s\n", arg_table[dst->tag]);
+			fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+		} else {
+			fprintf(func_out, "\tadd.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+			fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+			if(src->tag != dst->tag) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+			updateC("\taddx.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+			fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
+			if(src->tag != dst->tag) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+		}
 	}
-	
-	if(src->tag == ARG_IMMD8) {
-		fprintf(func_out, "\tmove.b %s, %%d1\n", arg_table[ARG_IMMD8]);
-		fprintf(func_out, "\text.w %%d1\n");
-	} else if(src->prefix == PREFIX_GET_SP) get_SP(ARG_DT1);
-	else fprintf(func_out, "\tmove.w %s, %%d1\n", arg_table[src->tag]);
-	src->tag = ARG_DT1; //hack to get src in reg, add wont work w/ mem to mem
-	//FLAG START
-#ifdef ACCURATE_HALF_CARRY
-	fprintf(func_out, "\tmove.w %s, (LAST_SRC, %%a5)\n", arg_table[src->tag]);
-	fprintf(func_out, "\tmove.w %s, (LAST_DST, %%a5)\n", arg_table[dst->tag]);
-#endif
-	//FLAG END
-	fprintf(func_out, "\tadd.w %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
-	//FLAG START
-	update_carry_flag();
-	if(dst->tag == ARG_SP) fprintf(func_out, "\tclr.b %%d7 | clear zero/subtract\n");
-#ifdef ACCURATE_HALF_CARRY
-	else clear_subtract_flag();
-#endif
-	fprintf(func_out, "\tori #0x40, %%d7 | set 16bit add\n");
-	//FLAG END
-	//if(dst->tag == ARG_H) new_HL();
-	//else if(dst->tag == ARG_SP) new_SP();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+
 	return true;
 }
 
 bool write_INC16(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	if(dst->prefix == PREFIX_GET_SP)
-		fprintf(func_out, "\tadda.l #1, %%a2\n");
-	else fprintf(func_out, "\taddq.w #1, %s\n", arg_table[dst->tag]);
-	//if(dst->tag == ARG_H) new_HL();
-	//else if(dst->tag == ARG_SP) new_SP();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	if(dst->prefix == PREFIX_GET_SP) {
+		fprintf(func_out, "\taddq.l #1, %%a2\n");
+	} else {
+		fprintf(func_out, "\text.w %s\n", arg_table[dst->tag]);
+		fprintf(func_out, "\taddq.l #1, %s\n", arg_table[dst->tag]);
+	}
+	
 	return true;
 }
 
 bool write_DEC16(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	if(dst->prefix == PREFIX_GET_SP)
-		fprintf(func_out, "\tsuba.l #1, %%a2\n");
-	else fprintf(func_out, "\tsubq.w #1, %s\n", arg_table[dst->tag]);
-	//if(dst->tag == ARG_H) new_HL();
-	//else if(dst->tag == ARG_SP) new_SP();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	if(dst->prefix == PREFIX_GET_SP) {
+		fprintf(func_out, "\tsubq.l #1, %%a2\n");
+	} else {
+		fprintf(func_out, "\text.w %s\n", arg_table[dst->tag]);
+		fprintf(func_out, "\tsubq.l #1, %s\n", arg_table[dst->tag]);
+	}
+
 	return true;
 }
 
 bool write_RLCA()
 {
-	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\trol.b #1, %s\n", arg_table[ARG_A]);
-	//FLAG START
-	update_carry_flag();
-	clear_half_carry_flag();
-	fprintf(func_out, "\tclr.b %%d7 | clear zero/subtract\n");
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index); 
+	updateC_clearZ("\trol.b #1, %s\n", arg_table[ARG_A]);
 	return true;
 }
 
@@ -1338,28 +1202,14 @@ bool write_RLA()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	carry_to_extend();
-	fprintf(func_out, "\troxl.b #1, %s\n", arg_table[ARG_A]);
-	//FLAG START
-	update_carry_flag();
-	clear_half_carry_flag();
-	fprintf(func_out, "\tclr.b %%d7 | clear zero/subtract\n");
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	updateC_clearZ_fast("\troxl.b #1, %s\n", arg_table[ARG_A]);
 	return true;
 }
 
 bool write_RRCA()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tror.b #1, %s\n", arg_table[ARG_A]);
-	//FLAG START
-	update_carry_flag();
-	clear_half_carry_flag();
-	fprintf(func_out, "\tclr.b %%d7 | clear zero/subtract\n");
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	updateC_clearZ("\tror.b #1, %s\n", arg_table[ARG_A]);
 	return true;
 }
 
@@ -1367,14 +1217,7 @@ bool write_RRA()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	carry_to_extend();
-	fprintf(func_out, "\troxr.b #1, %s\n", arg_table[ARG_A]);
-	//FLAG START
-	update_carry_flag();
-	clear_half_carry_flag();
-	fprintf(func_out, "\tclr.b %%d7 | clear zero/subtract\n");
-	//FLAG END
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	updateC_clearZ_fast("\troxr.b #1, %s\n", arg_table[ARG_A]);
 	return true;
 }
 
@@ -1382,22 +1225,11 @@ bool write_RLC(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, 0, true, 0);
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2) {
-		fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[dst->tag]);
-		fprintf(func_out, "\trol.b #1, %%d2\n", arg_table[dst->tag]);
-	} else 
-		fprintf(func_out, "\trol.b #1, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_carry_flag();
-	update_zero_flag();
-	clear_half_carry_flag();
-	//FLAG END
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2)
-		fprintf(func_out, "\tmove.b %%d2, %s\n", arg_table[dst->tag]);
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+	fprintf(func_out, "\trol.b #1, %s\n", arg_table[dst->tag]);
+	updateZC();
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
 	return true;
 }
 
@@ -1405,23 +1237,12 @@ bool write_RL(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, 0, true, 0);
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	carry_to_extend();
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2) {
-		fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[dst->tag]);
-		fprintf(func_out, "\troxl.b #1, %%d2\n", arg_table[dst->tag]);
-	} else 
-		fprintf(func_out, "\troxl.b #1, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_carry_flag();
-	update_zero_flag();
-	clear_half_carry_flag();
-	//FLAG END
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2)
-		fprintf(func_out, "\tmove.b %%d2, %s\n", arg_table[dst->tag]);
+	fprintf(func_out, "\troxl.b #1, %s\n", arg_table[dst->tag]);
+	updateZC();
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
 	return true;
 }
 
@@ -1429,22 +1250,11 @@ bool write_RRC(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, 0, true, 0);
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2) {
-		fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[dst->tag]);
-		fprintf(func_out, "\tror.b #1, %%d2\n", arg_table[dst->tag]);
-	} else 
-		fprintf(func_out, "\tror.b #1, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_carry_flag();
-	update_zero_flag();
-	clear_half_carry_flag();
-	//FLAG END
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2)
-		fprintf(func_out, "\tmove.b %%d2, %s\n", arg_table[dst->tag]);
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+	fprintf(func_out, "\tror.b #1, %s\n", arg_table[dst->tag]);
+	updateZC();
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
 	return true;
 }
 
@@ -1452,23 +1262,12 @@ bool write_RR(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, 0, true, 0);
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	carry_to_extend();
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2) {
-		fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[dst->tag]);
-		fprintf(func_out, "\troxr.b #1, %%d2\n", arg_table[dst->tag]);
-	} else 
-		fprintf(func_out, "\troxr.b #1, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_carry_flag();
-	update_zero_flag();
-	clear_half_carry_flag();
-	//FLAG END
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2)
-		fprintf(func_out, "\tmove.b %%d2, %s\n", arg_table[dst->tag]);
+	fprintf(func_out, "\troxr.b #1, %s\n", arg_table[dst->tag]);
+	updateZC();
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
 	return true;
 }
 
@@ -1476,22 +1275,11 @@ bool write_SLA(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, 0, true, 0);
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2) {
-		fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[dst->tag]);
-		fprintf(func_out, "\tasl.b #1, %%d2\n", arg_table[dst->tag]);
-	} else 
-		fprintf(func_out, "\tasl.b #1, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_carry_flag();
-	update_zero_flag();
-	clear_half_carry_flag();
-	//FLAG END
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2)
-		fprintf(func_out, "\tmove.b %%d2, %s\n", arg_table[dst->tag]);
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+	fprintf(func_out, "\tasl.b #1, %s\n", arg_table[dst->tag]);
+	updateZC();
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
 	return true;
 }
 
@@ -1499,22 +1287,11 @@ bool write_SRA(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, 0, true, 0);
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2) {
-		fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[dst->tag]);
-		fprintf(func_out, "\tasr.b #1, %%d2\n", arg_table[dst->tag]);
-	} else 
-		fprintf(func_out, "\tasr.b #1, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_carry_flag();
-	update_zero_flag();
-	clear_half_carry_flag();
-	//FLAG END
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2)
-		fprintf(func_out, "\tmove.b %%d2, %s\n", arg_table[dst->tag]);
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+	fprintf(func_out, "\tasr.b #1, %s\n", arg_table[dst->tag]);
+	updateZC();
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
 	return true;
 }
 
@@ -1522,22 +1299,11 @@ bool write_SRL(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, 0, true, 0);
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2) {
-		fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[dst->tag]);
-		fprintf(func_out, "\tlsr.b #1, %%d2\n", arg_table[dst->tag]);
-	} else 
-		fprintf(func_out, "\tlsr.b #1, %s\n", arg_table[dst->tag]);
-	//FLAG START
-	update_carry_flag();
-	update_zero_flag();
-	clear_half_carry_flag();
-	//FLAG END
-	if(dst->tag != ARG_A && dst->tag != ARG_DT2)
-		fprintf(func_out, "\tmove.b %%d2, %s\n", arg_table[dst->tag]);
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+	fprintf(func_out, "\tlsr.b #1, %s\n", arg_table[dst->tag]);
+	updateZC();
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
 	return true;
 }
 
@@ -1546,12 +1312,11 @@ bool write_BIT(ARG_FORMAT *src, ARG_FORMAT *dst)
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	dst->dst = false; //because dst is read only in this case
 	write_prefix(dst, src, false, 0);
-	fprintf(func_out, "\tbtst.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
-	update_zero_flag();
-	//clear_subtract_flag();
-	set_half_carry_flag();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	if(swap_table[dst->tag]) {
+		updateZ("\tbtst #%d, %s\n", src->tag-ARG_0+16, arg_table[dst->tag]);
+	} else {
+		updateZ("\tbtst.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+	}
 	return true;
 }
 
@@ -1559,11 +1324,12 @@ bool write_SET(ARG_FORMAT *src, ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, src, true, 0);
-	fprintf(func_out, "\tbset.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+	if(swap_table[dst->tag]) {
+		fprintf(func_out, "\tbset #%d, %s\n", src->tag-ARG_0+16, arg_table[dst->tag]);
+	} else {
+		fprintf(func_out, "\tori.b #0x%02X, %s\n", (unsigned char)1 << (src->tag - ARG_0), arg_table[dst->tag]);
+	}
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
 	return true;
 }
 
@@ -1571,11 +1337,12 @@ bool write_RES(ARG_FORMAT *src, ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, src, true, 0);
-	fprintf(func_out, "\tbclr.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
+	if(swap_table[dst->tag]) {
+		fprintf(func_out, "\tbclr #%d, %s\n", src->tag-ARG_0+16, arg_table[dst->tag]);
+	} else {
+		fprintf(func_out, "\tandi.b #0x%02X, %s\n", (unsigned char)~(1 << (src->tag - ARG_0)), arg_table[dst->tag]);
+	}
 	write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
 	return true;
 }
 
@@ -1583,62 +1350,37 @@ bool write_SWAP(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(dst, 0, true, 0);
-	if(dst->tag == ARG_A) {
-		fprintf(func_out, "\trol.b #4, %s\n", arg_table[dst->tag]);
-	} else {
-		if(dst->tag != ARG_DT2) fprintf(func_out, "\tmove.b %s, %%d2\n", arg_table[dst->tag]);
-		fprintf(func_out, "\trol.b #4, %%d2\n");
-	}
-	update_zero_flag();
-	clear_half_carry_flag();
-	clear_carry_flag();
-	if(dst->tag != ARG_A && dst->prefix != PREFIX_MEM_REG_INDIR)
-		fprintf(func_out, "\tmove.b %%d2, %s\n", arg_table[dst->tag]);
-	else if(dst->prefix == PREFIX_MEM_REG_INDIR)
-		write_suffix(dst);
-	//if(dst->tag == ARG_H) new_HL();
-	fprintf(func_out, "\tsubq.w #%d, %%d4\n", cycles);
-	next_instruction();
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+	updateZ_clearC("\trol.b #4, %s\n", arg_table[dst->tag]);
+	if(swap_table[dst->tag]) fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
+	write_suffix(dst);
+
 	return true;
 }
 
 bool write_JP(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	
-	if(dst->tag == ARG_H) {
-		fprintf(func_out, "\tclr.l %%d2\n");
-		fprintf(func_out, "\tmove.w %s, %%d2\n", arg_table[dst->tag]);
-		new_PC();
-	} else new_PC_immd(true);
-	
-	if(dst->tag == ARG_H) fprintf(func_out, "\tsubq.w #1, %%d4\n");
-	else fprintf(func_out, "\tsubq.w #4, %%d4\n");
-	next_instruction();
+	if(dst->tag == ARG_H) new_PC_HL();
+	else new_PC_immd(true);
+
 	return true;
 }
 
 bool write_Jcc(ARG_FORMAT *src, ARG_FORMAT *dst)
 {
-	char lable[1024];
-	get_lable(lable);
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	if(dst->tag == ARG_FNC || dst->tag == ARG_FC) {
-		fprintf(func_out, "\tmove.w %%d6, %%ccr\n");
-		if(dst->tag == ARG_FNC) fprintf(func_out, "\tbcs %s\n", lable);
-		else fprintf(func_out, "\tbcc %s\n", lable);
+		fprintf(func_out, "\tbtst #0, %%d6\n");
+		if(dst->tag == ARG_FNC) write_bra("beq", 0xC3, 0);
+		else write_bra("bne", 0xC3, 0);
 	} else {
-		fprintf(func_out, "\tmove.w %%d7, %%ccr\n");
-		if(dst->tag == ARG_FNZ) fprintf(func_out, "\tbeq %s\n", lable);
-		else fprintf(func_out, "\tbne %s\n", lable);
+		fprintf(func_out, "\tbtst #2, %%d6\n");
+		if(dst->tag == ARG_FNZ) write_bra("beq", 0xC3, 0);
+		else write_bra("bne", 0xC3, 0);
 	}
-	new_PC_immd(true);
-	fprintf(func_out, "\tsubq.w #4, %%d4\n");
-	next_instruction2(lable);
-	fprintf(func_out, "%s:\n", lable);
-	fprintf(func_out, "\tlea (2, %%a4), %%a4\n");
-	fprintf(func_out, "\tsubq.w #3, %%d4\n");
-	next_instruction();
+	fprintf(func_out, "\taddq.l #2, %%a4\n");
+
 	return true;
 }
 
@@ -1649,103 +1391,69 @@ bool write_JR(ARG_FORMAT *dst)
 	write_prefix(dst, 0, false, 0);
 	fprintf(func_out, "\tmove.b %s, %%d1\n", arg_table[dst->tag]);
 	fprintf(func_out, "\text.w %%d1\n");
-	fprintf(func_out, "\text.l %%d1\n");
-	fprintf(func_out, "\tadda.l %%d1, %%a4\n");
-	fprintf(func_out, "\tsubq.w #3, %%d4\n");
-	next_instruction();
+	fprintf(func_out, "\tadda.w %%d1, %%a4\n");
 	return true;
 }
 
 bool write_JRcc(ARG_FORMAT *src, ARG_FORMAT *dst)
 {
-	char lable[1024];
-	get_lable(lable);
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	write_prefix(src, 0, false, 0);
 	if(dst->tag == ARG_FNC || dst->tag == ARG_FC) {
-		fprintf(func_out, "\tmove.w %%d6, %%ccr\n");
-		if(dst->tag == ARG_FNC) fprintf(func_out, "\tbcs %s\n", lable);
-		else fprintf(func_out, "\tbcc %s\n", lable);
+		fprintf(func_out, "\tbtst #0, %%d6\n");
+		if(dst->tag == ARG_FNC) write_bra("beq", 0x18, 0);
+		else write_bra("bne", 0x18, 0);
 	} else {
-		fprintf(func_out, "\tmove.w %%d7, %%ccr\n");
-		if(dst->tag == ARG_FNZ) fprintf(func_out, "\tbeq %s\n", lable);
-		else fprintf(func_out, "\tbne %s\n", lable);
+		fprintf(func_out, "\tbtst #2, %%d6\n");
+		if(dst->tag == ARG_FNZ) write_bra("beq", 0x18, 0);
+		else write_bra("bne", 0x18, 0);
 	}
-	fprintf(func_out, "\tmove.b %s, %%d1\n", arg_table[src->tag]);
-	fprintf(func_out, "\text.w %%d1\n");
-	fprintf(func_out, "\text.l %%d1\n");
-	fprintf(func_out, "\tadda.l %%d1, %%a4\n");
-	fprintf(func_out, "\tsubq.w #3, %%d4\n");
-	next_instruction2(lable);
-	fprintf(func_out, "%s:\n", lable);
-	if(src->tag == ARG_IMMD8) fprintf(func_out, "\taddq.l #1, %%a4\n");
-	fprintf(func_out, "\tsubq.w #2, %%d4\n");
-	next_instruction();
+	fprintf(func_out, "\taddq.l #1, %%a4\n");
+
 	return true;
 }
 
 bool write_CALL(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tlea (2, %%a4), %%a4\n");
-	fprintf(func_out, "\tjsr push_PC :l\n");
+	fprintf(func_out, "\taddq.l #2, %%a4\n");
+	push_PC();
 	new_PC_immd(false);
-	fprintf(func_out, "\tsubq.w #6, %%d4\n");
-	next_instruction();
+
 	return true;
 }
 
 bool write_CALLcc(ARG_FORMAT *src, ARG_FORMAT *dst)
 {
-	char lable[1024];
-	get_lable(lable);
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tlea (2, %%a4), %%a4\n");
+	fprintf(func_out, "\taddq.l #2, %%a4\n");
 	if(dst->tag == ARG_FNC || dst->tag == ARG_FC) {
-		fprintf(func_out, "\tmove.w %%d6, %%ccr\n");
-		if(dst->tag == ARG_FNC) fprintf(func_out, "\tbcs %s\n", lable);
-		else fprintf(func_out, "\tbcc %s\n", lable);
+		fprintf(func_out, "\tbtst #0, %%d6\n");
+		if(dst->tag == ARG_FNC) write_bra("beq", 0xCD, 2);
+		else write_bra("bne", 0xCD, 2);
 	} else {
-		fprintf(func_out, "\tmove.w %%d7, %%ccr\n");
-		if(dst->tag == ARG_FNZ) fprintf(func_out, "\tbeq %s\n", lable);
-		else fprintf(func_out, "\tbne %s\n", lable);
+		fprintf(func_out, "\tbtst #2, %%d6\n");
+		if(dst->tag == ARG_FNZ) write_bra("beq", 0xCD, 2);
+		else write_bra("bne", 0xCD, 2);
 	}
-	fprintf(func_out, "\tjsr push_PC :l\n");
-	new_PC_immd(false);
-	fprintf(func_out, "\tsubq.w #6, %%d4\n");
-	next_instruction2(lable);
-	fprintf(func_out, "%s:\n", lable);
-	fprintf(func_out, "\tsubq.w #3, %%d4\n");
-	next_instruction();
+
 	return true;
 }
 
 bool write_RET()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tjsr pop_PC :l\n");
-	fprintf(func_out, "\tsubq.w #4, %%d4\n");
-	next_instruction();
+	pop_PC();
+
 	return true;
 }
 
 bool write_RETI()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tjsr pop_PC :l\n");
-	fprintf(func_out, "\tmovea.l (MEM_TABLE+2040, %%a5) ,%%a0\n");
-	fprintf(func_out, "\tbset #31, %%d7 | enable interrupts\n");
-	fprintf(func_out, "\tcmp.b #1, (CPU_HALT, %%a5)\n"); //was a halt pending?
-	fprintf(func_out, "\tbne 0f\n");
-	fprintf(func_out, "\tmove.b (IF, %%a0), %%d0\n");
-	fprintf(func_out, "\tand.b (IE, %%a0), %%d0\n");
-	fprintf(func_out, "\tbne 0f\n"); //don't bother halting if there's an intr waiting
-	fprintf(func_out, "\tmoveq #-1, %%d4\n");
-	fprintf(func_out, "\tmove.b #-1, (CPU_HALT, %%a5)\n");
-	fprintf(func_out, "0:\n");
-	fprintf(func_out, "\tjsr check_interrupts\n");
-	fprintf(func_out, "\tsubq.w #4, %%d4\n");
-	next_instruction();
+	pop_PC();
+	fprintf(func_out, "\tjmp (enable_intr_entry-function_base, %%a3)\n");
+
 	return true;
 }
 
@@ -1754,104 +1462,99 @@ bool write_RETcc(ARG_FORMAT *dst)
 	char lable[1024];
 	get_lable(lable);
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	
+	fprintf(func_out, "\tsubq.w #1, %%d4\n"); //RETcc takes one more cycles than RET
 	if(dst->tag == ARG_FNC || dst->tag == ARG_FC) {
-		fprintf(func_out, "\tmove.w %%d6, %%ccr\n");
-		if(dst->tag == ARG_FNC) fprintf(func_out, "\tbcs %s\n", lable);
-		else fprintf(func_out, "\tbcc %s\n", lable);
+		fprintf(func_out, "\tbtst #0, %%d6\n");
+		if(dst->tag == ARG_FNC) write_bra("beq", 0xC9, 0);
+		else write_bra("bne", 0xC9, 0);
 	} else {
-		fprintf(func_out, "\tmove.w %%d7, %%ccr\n");
-		if(dst->tag == ARG_FNZ) fprintf(func_out, "\tbeq %s\n", lable);
-		else fprintf(func_out, "\tbne %s\n", lable);
+		fprintf(func_out, "\tbtst #2, %%d6\n");
+		if(dst->tag == ARG_FNZ) write_bra("beq", 0xC9, 0);
+		else write_bra("bne", 0xC9, 0);
 	}
-	fprintf(func_out, "\tjsr pop_PC :l\n");
-	fprintf(func_out, "\tsubq.w #5, %%d4\n");
-	next_instruction2(lable);
-	fprintf(func_out, "%s:\n", lable);
-	fprintf(func_out, "\tsubq.w #2, %%d4\n");
-	next_instruction();
+
 	return true;
 }
 
 bool write_RST(ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tjsr push_PC :l\n");
-	fprintf(func_out, "\tmoveq.l %s, %%d2\n", arg_table[dst->tag]);
-	new_PC();
-	fprintf(func_out, "\tsubq.w #4, %%d4\n");
-	next_instruction();
+	push_PC();
+	fprintf(func_out, "\tclr.b (PC_BASE, %%a5)\n");
+	fprintf(func_out, "\tmovea.l (%%a6, 2), %%a4\n");
+	if(dst->tag == ARG_R08) fprintf(func_out, "\taddq.l #8, %%a4 | now pc is correct\n");
+	else if(dst->tag != ARG_R00) fprintf(func_out, "\tlea (%s, %%a4), %%a4 | now pc is correct\n", arg_table[dst->tag]);
+
 	return true;
 }
 
 bool write_HALT()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tbtst #31, %%d7\n");
-	fprintf(func_out, "\tbeq 0f\n");
-	fprintf(func_out, "\tmoveq #-1, %%d4\n");
-	fprintf(func_out, "\tmove.b #-1, (CPU_HALT, %%a5)\n");
-	fprintf(func_out, "\tbra 1f\n");
+	fprintf(func_out, "\tcmp.b #HALT_AFTER_EI, (CPU_HALT, %%a5)\n");
+	fprintf(func_out, "\tbne 0f\n");
+	fprintf(func_out, "\tst (IME, %%a5)\n");
 	fprintf(func_out, "0:\n");
-	fprintf(func_out, "\tmove.b #1, (CPU_HALT, %%a5)\n");
+	fprintf(func_out, "\ttst.b (IME, %%a5)\n");
+	fprintf(func_out, "\tbeq 1f\n");
+	fprintf(func_out, "\tmoveq #-1, %%d4\n");
+	fprintf(func_out, "\tmove.b #HALT_ACTIVE, (CPU_HALT, %%a5)\n");
+	fprintf(func_out, "\tbra 2f\n");
 	fprintf(func_out, "1:\n");
-	fprintf(func_out, "\tsubq.w #1, %%d4\n");
-	next_instruction();
+	fprintf(func_out, "\tmove.b #HALT_PENDING, (CPU_HALT, %%a5)\n");
+	fprintf(func_out, "2:\n");
+
 	return true;
 }
 
 bool write_DAA()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
-	fprintf(func_out, "\tcmpi.b #0x99, %%d5\n");
-	fprintf(func_out, "\tbhi 0f\n");
-	fprintf(func_out, "\tbtst #0, %%d6\n");
-	fprintf(func_out, "\tbne 0f\n");
-	fprintf(func_out, "\tmoveq #0x00, %%d0\n");
-	fprintf(func_out, "\tbclr #0, %%d6\n");
-	fprintf(func_out, "\tbra 1f\n");
+	fprintf(func_out, "\tmove.b %%d5, %%d0 | d0 is current a\n");
+	fprintf(func_out, "\tswap %%d6 | d5 is old a\n");
+	fprintf(func_out, "\tmove.b %%d6, %%d5 | d5 is old a\n");
+	fprintf(func_out, "\tbtst #16, %%d6\n");
+	fprintf(func_out, "\tbeq no_carry\n");
+	fprintf(func_out, "\tsub.b %%d5, %%d0\n");
+	fprintf(func_out, "\tbcc daa_sub\n");
+	fprintf(func_out, "daa_add: | current a was bigger...this means last instruction was add\n");
+	fprintf(func_out, "\tsub.b %%d1, %%d1 |set zero, clear extend\n");	
+	fprintf(func_out, "\tabcd %%d0, %%d5 | redo operation in bcd\n");
+	updateZC();
+	fprintf(func_out, "\tbra 0f	\n");
+	fprintf(func_out, "no_carry:\n");
+	fprintf(func_out, "\tsub.b %%d5, %%d0\n");
+	fprintf(func_out, "\tbcc daa_add\n");
+	fprintf(func_out, "daa_sub:\n");
+	fprintf(func_out, "\tneg.b %%d0\n");
+	fprintf(func_out, "\tsub.b %%d1, %%d1 |set zero, clear extend\n");
+	fprintf(func_out, "\tsbcd %%d0, %%d5 | redo operation in bcd\n");
+	updateZC();
 	fprintf(func_out, "0:\n");
-	fprintf(func_out, "\tmoveq #0x60, %%d0\n");
-	fprintf(func_out, "\tbset #0, %%d6\n");
-	fprintf(func_out, "1:\n");
-	fprintf(func_out, "\tmove.b %%d5, %%d1\n");
-	fprintf(func_out, "\tandi.b #0x0f, %%d1\n");
-	fprintf(func_out, "\tcmpi.b #0x9, %%d1\n");
-	fprintf(func_out, "\tbhi 0f\n");
-	fprintf(func_out, "\tmoveq #0, %%d2\n");
-	fprintf(func_out, "\tmove.l %%d0, -(%%a7)\n");
-	fprintf(func_out, "\tjsr calculate_half_carry :l\n");
-	fprintf(func_out, "\tmove.l (%%a7)+, %%d0\n");
-	fprintf(func_out, "\tbtst #5, %%d2\n");
-	fprintf(func_out, "\tbeq 1f\n");
-	fprintf(func_out, "0:\n");
-	fprintf(func_out, "\tori.b #0x06, %%d0\n");
-	fprintf(func_out, "1:\n");
-	fprintf(func_out, "\tmove.b %%d5, (LAST_DST, %%a5)\n");
-	fprintf(func_out, "\tmove.b %%d0, (LAST_SRC, %%a5)\n");
-	fprintf(func_out, "\tbtst #5, %%d7\n");
-	fprintf(func_out, "\tbeq 0f\n");
-	fprintf(func_out, "\tsub.b %%d0, %%d5\n");
-	update_zero_flag();
-	set_subtract_flag();
-	fprintf(func_out, "\tbra 1f\n");
-	fprintf(func_out, "0:\n");
-	fprintf(func_out, "\tadd.b %%d0, %%d5\n");
-	update_zero_flag();
-	fprintf(func_out, "1:\n");
-	fprintf(func_out, "\tsubq.w #1, %%d4\n");
-	next_instruction();
+	
 	return true;
 }
 
 void generate_int()
 {
-	fprintf(func_out, "generate_int: | input: %%d2, number of int\n");
-	fprintf(func_out, "\tbclr #31, %%d7 | disable interrupts\n");
+	fprintf(func_out, "generate_int: | input: %%d0, number of int\n");
+	fprintf(func_out, "\tclr.b (IME, %%a5) | disable interrupts\n");
 	fprintf(func_out, "\tclr.b (CPU_HALT, %%a5)\n");
-	fprintf(func_out, "\tjsr push_PC\n");
-	new_PC();
-	fprintf(func_out, "\trts\n");
+	push_PC();
+	fprintf(func_out, "\tclr.b (PC_BASE, %%a5)\n");
+	fprintf(func_out, "\tmovea.l (%%a6, 2), %%a4\n");
+	fprintf(func_out, "\tadda.l %%d0, %%a4\n");
+	fprintf(func_out, "\tjmp (%%a1)\n");
+
+	fprintf(func_out, "generate_int_event: | input: %%d0, number of int\n");
+	fprintf(func_out, "\tclr.b (IME, %%a5) | disable interrupts\n");
+	fprintf(func_out, "\tclr.b (CPU_HALT, %%a5)\n");
+	push_PC();
+	fprintf(func_out, "\tclr.b (PC_BASE, %%a5)\n");
+	fprintf(func_out, "\tmovea.l (%%a6, 2), %%a4\n");
+	fprintf(func_out, "\tadda.l %%d0, %%a4\n");
+	fprintf(func_out, "\tEND_EVENT end_generate_int_event\n");
+	fprintf(func_out, "end_generate_int_event:\n");
 }
 
 
@@ -1901,12 +1604,12 @@ void fill_arg(ARG_FORMAT *arg, char *a, int i, bool dst)
 		arg->name = OP_HL;
 	} else if(strcmp(a, "SP") == 0) {
 		arg->prefix = PREFIX_GET_SP;
-		arg->tag = ARG_DT2;
+		arg->tag = ARG_DT1;
 		arg->name = OP_SP;
 	} else if(strcmp(a, "SP+byte") == 0) {
 		cycles++;
 		arg->prefix = PREFIX_SP_IMMD;
-		arg->tag = ARG_DT2;
+		arg->tag = ARG_DT1;
 		arg->name = OP_SP_IMMD;
 	} else if(strcmp(a, "byte") == 0) {
 		cycles++;
@@ -1915,7 +1618,7 @@ void fill_arg(ARG_FORMAT *arg, char *a, int i, bool dst)
 		//if(dst) ERROR
 	} else if(strcmp(a, "word") == 0) {
 		cycles += 2;
-		arg->tag = ARG_DT2;
+		arg->tag = ARG_DT1;
 		arg->prefix = PREFIX_GET_IMMD16;
 		arg->name = OP_IMMD16;
 	} else if(strcmp(a, "(FF00+byte)") == 0) {
@@ -1948,7 +1651,7 @@ void fill_arg(ARG_FORMAT *arg, char *a, int i, bool dst)
 		if(i == 0) { arg->tag = ARG_B; arg->name = OP_BC; }
 		else if(i == 1) { arg->tag = ARG_D; arg->name = OP_DE; }
 		else if(i == 2) { arg->tag = ARG_H; arg->name = OP_HL; }
-		else if(i == 3) { arg->prefix = PREFIX_GET_SP; arg->tag = ARG_DT2; arg->name = OP_SP; }
+		else if(i == 3) { arg->prefix = PREFIX_GET_SP; arg->tag = ARG_DT1; arg->name = OP_SP; }
 	} else if(strcmp(a, "qq") == 0) {
 		if(i == 0) { arg->tag = ARG_B; arg->name = OP_BC; }
 		else if(i == 1) {arg->tag = ARG_D; arg->name = OP_DE; }
@@ -1956,7 +1659,7 @@ void fill_arg(ARG_FORMAT *arg, char *a, int i, bool dst)
 		else if(i == 3) {
 			//if(!dst) {
 				arg->prefix = PREFIX_GET_AF;
-				arg->tag = ARG_DT2;
+				arg->tag = ARG_DT1;
 			//} else arg->tag = ARG_A;
 			arg->name = OP_AF;
 		}
@@ -2155,6 +1858,7 @@ read_byte: //mmm...lable/goto
 			} else if(strcmp(opcode, "EI") == 0) {
 				ok = write_EI();
 				table[opcode_index].opcode_name = OP_EI;
+				//event_table[opcode_index] = 1;
 			} else if(strcmp(opcode, "ADD16") == 0) {
 				if(strcmp(dst, "SP") == 0) cycles += 2;
 				else cycles++;
@@ -2224,37 +1928,57 @@ read_byte: //mmm...lable/goto
 				ok = write_SWAP(&dst_format);
 				table[opcode_index].opcode_name = OP_SWAP;
 			} else if(strcmp(opcode, "JP") == 0) {
+				if(dst_format.tag != ARG_H) cycles = 4;
+				event_table[opcode_index] = 1;
 				ok = write_JP(&dst_format);
 				table[opcode_index].opcode_name = OP_JP;
 			} else if(strcmp(opcode, "Jcc") == 0) {
+				cycles = 3;
+				event_table[opcode_index] = 1;
 				ok = write_Jcc(&src_format, &dst_format);
 				table[opcode_index].opcode_name = OP_JP;
 			} else if(strcmp(opcode, "JR") == 0) {
+				cycles = 3;
+				event_table[opcode_index] = 1;
 				ok = write_JR(&dst_format);
 				table[opcode_index].opcode_name = OP_JR;
 			} else if(strcmp(opcode, "JRcc") == 0) {
+				cycles = 2;
+				event_table[opcode_index] = 1;
 				ok = write_JRcc(&src_format, &dst_format);
 				table[opcode_index].opcode_name = OP_JR;
 			} else if(strcmp(opcode, "CALL") == 0) {
+				cycles = 6;
+				event_table[opcode_index] = 1;
 				ok = write_CALL(&dst_format);
-				table[opcode_index].opcode_name = OP_CALL;
+				table[opcode_index].opcode_name = OP_CALL;	
 			} else if(strcmp(opcode, "CALLcc") == 0) {
+				cycles = 3;
+				event_table[opcode_index] = 1;
 				ok = write_CALLcc(&src_format, &dst_format);
 				table[opcode_index].opcode_name = OP_CALL;
 			} else if(strcmp(opcode, "RET") == 0) {
+				cycles = 4;
+				event_table[opcode_index] = 1;
 				ok = write_RET();
 				table[opcode_index].opcode_name = OP_RET;
 			} else if(strcmp(opcode, "RETI") == 0) {
 				cycles = 4;
+				event_table[opcode_index] = 1;
 				ok = write_RETI();
 				table[opcode_index].opcode_name = OP_RETI;
 			} else if(strcmp(opcode, "RETcc") == 0) {
+				cycles = 1;
+				event_table[opcode_index] = 1;
 				ok = write_RETcc(&dst_format);
 				table[opcode_index].opcode_name = OP_RET;
 			} else if(strcmp(opcode, "RST") == 0) {
+				cycles = 4;
+				event_table[opcode_index] = 1;
 				ok = write_RST(&dst_format);
 				table[opcode_index].opcode_name = OP_RST;
 			} else if(strcmp(opcode, "HALT") == 0) {
+				event_table[opcode_index] = 1;
 				ok = write_HALT();
 				table[opcode_index].opcode_name = OP_HALT;
 			} else if(strcmp(opcode, "DAA") == 0) {
@@ -2270,6 +1994,8 @@ read_byte: //mmm...lable/goto
 				sprintf(lable, "opcode%02X%02X", prefix, opcode_index);
 				strcpy(table[opcode_index].func_name, lable);
 				fprintf(func_out, "opcode%02X%02X_end: ", prefix, opcode_index);
+				if(prefix == 0) cycles_table[opcode_index] = cycles;
+				else cycles_table[opcode_index + 256] = cycles;
 				if(src[0] == 0 && dst[0] == 0) fprintf(func_out, "| %s\n",
 					opcode_names[table[opcode_index].opcode_name]);
 				else if(src[0] == 0) fprintf(func_out, "| %s %s\n",
@@ -2297,20 +2023,25 @@ int main(int argc, void *argv[])
 	//}
 	in = fopen("opcode_desc.txt", "r");
 	func_out = fopen("gameboy_opcodes.s", "w");
-	table_out = fopen("table_out.txt", "w");
+	//table_out = fopen("table_out.txt", "w");
 	line[0] = 0;
 	memset(opcode_table, 0, sizeof(OPCODE_HEADER) * 256);
 	memset(suffix_table, 0, sizeof(OPCODE_HEADER) * 256);
+	memset(cycles_table, 0, sizeof(int) * 512);
+	memset(event_table, 0, sizeof(int) * 256);
 	
 	fprintf(func_out, ".global jump_table\n");
 	fprintf(func_out, ".global opcode_table\n");
 	fprintf(func_out, ".global jump_table2\n");
 	fprintf(func_out, ".global suffix_table\n");
 	fprintf(func_out, ".global size_table\n");
+	fprintf(func_out, ".global cycles_table\n");
+	fprintf(func_out, ".global event_table\n");
 
-	fprintf(func_out, ".global generate_int\n\n");
-	fprintf(func_out, ".extern io_read\n");
-	fprintf(func_out, ".extern io_write\n\n");
+	fprintf(func_out, ".global generate_int\n");
+	fprintf(func_out, ".global generate_int_event\n\n");
+	//fprintf(func_out, ".extern io_read\n");
+	//fprintf(func_out, ".extern io_write\n\n");
 	fprintf(func_out, ".include \"gbasm.h\"\n\n");
 	fprintf(func_out, ".data\n");
 	fprintf(func_out, "opcode_start:\n");
@@ -2333,12 +2064,25 @@ int main(int argc, void *argv[])
 	move.l (%a0,%d0.l),%a0
 	jbsr (%a0)
 	*/
-
+	
+	strcpy(opcode_table[0].func_name, "opcode0000");
+	opcode_index = 0; prefix = 0;
+	cycles_table[0] = 1;
+	fprintf(func_out, "opcode0000:\n");
+	//fprintf(func_out, "\tsubq.w #1, %%d4\n");
+	//next_instruction();
+	fprintf(func_out, "opcode0000_end: | NOP\n");
+	
+	strcpy(opcode_table[0xCB].func_name, "opcode00CB");
 	fprintf(func_out, "opcode00CB:\n");
 	fprintf(func_out, "\tmove.b (%%a4)+, (opcode00CB_end - opcode00CB + (%d) - 2, %%a6)\n",
-		-(256-0xCB) * 256);
-	fprintf(func_out, "\tjmp (0x0FB4, %%a6)\n");
+		-(256-0xCB) * 256 + 6 + MEM_WRITE_SIZE + IO_WRITE_SIZE + PREFIX_OPCODE_SIZE);
+	fprintf(func_out, "\tjmp (0x7F%02X, %%a6)\n", 6 + MEM_WRITE_SIZE + IO_WRITE_SIZE);
 	fprintf(func_out, "opcode00CB_end:\n");
+
+	fprintf(func_out, "opcode_illegal:\n");
+	fprintf(func_out, "\tmove.w #1, (ERROR, %%a5) | Illegal Opcode\n");
+	fprintf(func_out, "\tjmp (return-function_base, %%a3)\n");
 	
 	//fprintf(func_out, "\tlea (jump_table2, %%pc), %%a0\n");
 	//fprintf(func_out, "\tclr.w %%d0\n");
@@ -2346,23 +2090,13 @@ int main(int argc, void *argv[])
 	//fprintf(func_out, "\tadd.w %%d0, %%d0\n"); //d0 *= 4;
 	//fprintf(func_out, "\tmove.w (%%a0, %%d0.w), %%d0\n");
 	//fprintf(func_out, "\tjmp (%%a3, %%d0.w)\n");
-	
-	for(i = 0; i < 256; i++) {
-		if(opcode_table[i].func_name[0] || i == 0xCB) continue;
-		opcode_index = i; prefix = 0;
-		sprintf(line, "opcode%02X%02X", 0, i);
-		strcpy(opcode_table[i].func_name, line);
-		fprintf(func_out, "opcode%02X%02X:\n", 0, i);
-		fprintf(func_out, "\tsubq.w #1, %%d4\n");
-		next_instruction();
-		fprintf(func_out, "opcode%02X%02X_end:\n", 0, i);
-	}
 	//calculate_half_carry();
-	push_PC();
-	pop_PC();
+	//push_PC();
+	//pop_PC();
+	prefix = 0xff;
 	generate_int();
 
-	strcpy(opcode_table[0xCB].func_name, "opcode00CB");
+	
 	
 	fprintf(func_out, "\njump_table:\n");
 	for(i = 0 ; i < 256 ; i++) {
@@ -2370,7 +2104,7 @@ int main(int argc, void *argv[])
 		//else if(i == 0xfc) fprintf(func_out, ".word special_write16_stack - function_base\n");
 		//else if(i == 0xf4) fprintf(func_out, ".word special_write16_return - function_base\n");
 		if(opcode_table[i].func_name[0]) fprintf(func_out, ".word %s - function_base\n", opcode_table[i].func_name);
-		else fprintf(func_out, ".word BAD\n");
+		else fprintf(func_out, ".word opcode_illegal - function_base\n");
 	}
 
 	fprintf(func_out, "\njump_table2:\n");
@@ -2379,22 +2113,31 @@ int main(int argc, void *argv[])
 		else fprintf(func_out, ".word opcode0000 - function_base\n");
 	}
 	
-	fprintf(func_out, "\n.if SIZE_TABLE\n");
+	//fprintf(func_out, "\n.if SIZE_TABLE\n");
 	fprintf(func_out, "\nsize_table:\n");
 	for(i = 0; i < 256; i++) {
 		if(opcode_table[i].func_name[0] && i != 0xCB)
-			fprintf(func_out, ".word %s_end - %s\n", opcode_table[i].func_name, opcode_table[i].func_name);
+			fprintf(func_out, ".byte %s_end - %s\n", opcode_table[i].func_name, opcode_table[i].func_name);
 		else
-			fprintf(func_out, ".word 0\n");
+			fprintf(func_out, ".byte -1\n");
 	}
 	for(i = 0; i < 256; i++) {
 		if(suffix_table[i].func_name[0])
-			fprintf(func_out, ".word %s_end - %s\n", suffix_table[i].func_name, suffix_table[i].func_name);
+			fprintf(func_out, ".byte %s_end - %s\n", suffix_table[i].func_name, suffix_table[i].func_name);
 		else
-			fprintf(func_out, ".word 0\n");
+			fprintf(func_out, ".byte -1\n");
 	}
-	fprintf(func_out, "\n.endif\n");
+	//fprintf(func_out, "\n.endif\n");
 
+	fprintf(func_out, "\ncycles_table:\n");
+	for(i = 0; i < 512; i++) {
+		fprintf(func_out, ".byte %d\n", cycles_table[i]);
+	}
+
+	fprintf(func_out, "\nevent_table:\n");
+	for(i = 0; i < 256; i++) {
+		fprintf(func_out, ".byte %d\n", event_table[i]);
+	}
 
 	fprintf(func_out, "\n.if GB_DEBUG\n");
 	fprintf(func_out, "\nopcode_table:\n");
@@ -2414,7 +2157,7 @@ int main(int argc, void *argv[])
 
 	fclose(in);
 	fclose(func_out);
-	fclose(table_out);
+	//fclose(table_out);
 
 	return 0;
 }

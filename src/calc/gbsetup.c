@@ -11,28 +11,8 @@ volatile unsigned short counter = 0;
 volatile unsigned short frames = 0;
 volatile unsigned short current_fps = 0;
 
-extern short hw1_fps_counter(void);
-asm("
-hw1_fps_counter:
-	move.w #0x2700, %sr
-	addq.w #1, counter
-	cmp.w #350, counter
-	bne 0f
-	move.w frames, current_fps
-	clr.w counter
-	clr.w frames
-0:
-	rte
-");
-
-extern short hw2_fps_counter(void);
-asm("
-hw2_fps_counter:
-	move.w #0x2700, %sr
-	move.w frames, current_fps
-	clr.w frames
-	rte
-");
+extern short hw1_tick(void);
+extern short hw2_tick(void);
 
 void EnableAutoInt3()
 {
@@ -64,10 +44,10 @@ char init()
 	frames = 0;
 	gb_data->int3_enabled = IsAutoInt3Enabled();
 	if(gb_data->hw_version == 2 && !gb_data->vti) { //use more accurate AI3 on HW2
-		SetIntVec(AUTO_INT_3, (void *)hw2_fps_counter);
+		SetIntVec(AUTO_INT_3, (void *)hw2_tick);
 		EnableAutoInt3();
 	} else {
-		SetIntVec(AUTO_INT_1, (void *)hw1_fps_counter);
+		SetIntVec(AUTO_INT_1, (void *)hw1_tick);
 	}
 
 	if(!GrayOn()) return FALSE;
@@ -84,7 +64,6 @@ void cleanup()
 {
 	short i;
 	
-	memcpy(LCD_MEM, GrayGetPlane(DARK_PLANE), LCD_SIZE);
 	GrayOff();
 	
 	if(gb_data->ints_redirected) {

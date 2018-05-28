@@ -8,6 +8,7 @@
 void select_rom(char *name);
 char init_rom(char *name);
 short esc_menu();
+void options_menu();
 #else
 #define select_rom _DLL_call(void, (char *), DLL_SELECT_ROM)
 #define init_rom _DLL_call(char, (char *), DLL_INIT_ROM)

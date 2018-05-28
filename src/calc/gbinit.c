@@ -64,7 +64,7 @@ void select_rom(char *file)
 	char *name_ptr = name_data;
 	short number = 0;
 	
-	menu = PopupNew("Select ROM", 0);
+	menu = PopupNew("GB68K - Select ROM", 0);
 	if(menu == H_NULL) { gb_data->error = ERROR_OUT_OF_MEM; file[0] = 0; return; }
 
 	FolderOp(NULL, FOP_LOCK | FOP_ALL_FOLDERS);
@@ -119,16 +119,29 @@ char init_rom(char *file)
 	if(v == 0) banks_per_file = 7;
 	else banks_per_file = 6;
 	
-	if(gb_data->rom_ptr[0][0x147] > 0x1E) { gb_data->error = ERROR_UNSUPPORTED; return FALSE; }
-	else gb_data->cart_type = mbc_table[gb_data->rom_ptr[0][0x147]];
+	i = gb_data->rom_ptr[0][0x147];
+	if(i > 0x1E) { gb_data->error = ERROR_UNSUPPORTED; return FALSE; }
+	else gb_data->cart_type = mbc_table[i];
 	if(gb_data->cart_type == BAD_MBC) { gb_data->error = ERROR_UNSUPPORTED; return FALSE; }
+	if(i == 0x0f || i == 0x10) {
+		gb_data->rtc_block = HeapAllocPtr(256);
+		if(gb_data->rtc_block == NULL) { gb_data->error = ERROR_OUT_OF_MEM; return FALSE; }
+	}
 	
 	gb_data->rom_banks = 2 << gb_data->rom_ptr[0][0x148];
 	i = gb_data->rom_ptr[0][0x149];
-	if(i == 0) gb_data->ram_banks = 0;
-	else if(i == 1 || i == 2) gb_data->ram_banks = 1;
-	else if(i == 3) gb_data->ram_banks = 4;
-	else { gb_data->error = ERROR_UNSUPPORTED; return FALSE; }
+	if(i == 1) {
+		gb_data->ram_banks = 1; gb_data->ram_blocks = 7;
+	} else if(i == 2) {
+		gb_data->ram_banks = 1; gb_data->ram_blocks = 31;
+	} else if(i == 3) {
+		gb_data->ram_banks = 4; gb_data->ram_blocks = 31;
+	} else if(i > 3) { gb_data->error = ERROR_UNSUPPORTED; return FALSE; }
+	
+	if(gb_data->cart_type == MBC2) {
+		gb_data->ram_banks = 1; gb_data->ram_blocks = 1;
+	}
+	
 	gb_data->current_rom = 1;
 	gb_data->current_ram = 0;
 	gb_data->mbc_mode = 0;
@@ -165,7 +178,7 @@ char init_rom(char *file)
 	return TRUE;
 }
 
-static inline void options_menu()
+void options_menu()
 {
 	HANDLE dialog;
 	HANDLE fs_menu;
@@ -186,41 +199,69 @@ static inline void options_menu()
 	PopupAddText(on_off_menu, -1, "Off", 0);
 	
 	if(gb_data->calc_type == 0) {
-		dialog = DialogNewSimple(140, 56);
+		dialog = DialogNewSimple(140, 68);
 		dy = 6;
 	} else {
-		dialog = DialogNewSimple(180, 68);
+		dialog = DialogNewSimple(180, 86);
 		dy = 9;
 	}
 	DialogAddTitle(dialog, "GB68K - Options", BT_OK, BT_CANCEL);
 	DialogAddPulldown(dialog, 5, y_pos, "Frameskip: ", fs_menu, 0); y_pos += dy;
 	DialogAddPulldown(dialog, 5, y_pos, "Timer: ", on_off_menu, 1); y_pos += dy;
-	DialogAddPulldown(dialog, 5, y_pos, "Show FPS: ", on_off_menu, 2); y_pos += dy;
-	DialogAddPulldown(dialog, 5, y_pos, "Archive SRAM: ", on_off_menu, 3);
+	DialogAddPulldown(dialog, 5, y_pos, "Serial Port: ", on_off_menu, 2); y_pos += dy;
+	DialogAddPulldown(dialog, 5, y_pos, "SRAM in savestates: ", on_off_menu, 3); y_pos += dy;
+	DialogAddPulldown(dialog, 5, y_pos, "Show FPS: ", on_off_menu, 4); y_pos += dy;
+	DialogAddPulldown(dialog, 5, y_pos, "Auto archive: ", on_off_menu, 5);
 	
 	pulldown_buffer[0] = gb_data->frame_skip + 1;
 	pulldown_buffer[1] = 2 - gb_data->enable_timer;
-	pulldown_buffer[2] = 2 - gb_data->show_fps;
-	pulldown_buffer[3] = 2 - gb_data->archive_sram;
+	pulldown_buffer[2] = 2 - gb_data->enable_serial;
+	pulldown_buffer[3] = 2 - gb_data->sram_savestate;
+	pulldown_buffer[4] = 2 - gb_data->show_fps;
+	pulldown_buffer[5] = 2 - gb_data->archive_sram;
 	
 	if(DialogDo(dialog, CENTER, CENTER, NULL, pulldown_buffer) == KEY_ENTER) {
 		gb_data->frame_skip = pulldown_buffer[0] - 1;
 		gb_data->enable_timer = 2 - pulldown_buffer[1];
-		gb_data->show_fps = 2 - pulldown_buffer[2];
-		gb_data->archive_sram = 2 - pulldown_buffer[3];
+		gb_data->enable_serial = 2 - pulldown_buffer[2];
+		gb_data->sram_savestate = 2 - pulldown_buffer[3];
+		gb_data->show_fps = 2 - pulldown_buffer[4];
+		gb_data->archive_sram = 2 - pulldown_buffer[5];
 	}
 	
 	HeapFree(dialog);
+	HeapFree(fs_menu);
+	HeapFree(on_off_menu);
+}
+
+short state_menu(const char *title)
+{
+	HANDLE menu;
+	char text[] = "State 0";
+	char file[9];
+	short i;
+	
+	menu = PopupNew(title, 0);
+	for(i = 0; i < 10; i++) {
+		sprintf(file, "%ss%d", gb_data->rom_name, i);
+		if(file_pointer(file) == NULL) PopupAddText(menu, -1, "empty", 0);
+		else PopupAddText(menu, -1, text, 0);
+		text[6]++;
+	}
+	
+	return PopupDo(menu, CENTER, CENTER, 0);
 }
 
 short esc_menu()
 {
 	HANDLE menu;
-	short s;
+	short s = 0, r;
 	
 	menu = PopupNew("GB68K", 0);
 	if(menu == H_NULL) { gb_data->error = ERROR_OUT_OF_MEM; return -1; }
 	PopupAddText(menu, -1, "Options", 0);
+	PopupAddText(menu, -1, "Save State", 0);
+	PopupAddText(menu, -1, "Load State", 0);
 	PopupAddText(menu, -1, "Quit", 0);
 	GKeyFlush();
 	if(gb_data->calc_type == 0)
@@ -229,11 +270,23 @@ short esc_menu()
 		DrawLine(0, 121, 239, 121, A_NORMAL);
 	
 	do {
-		s = PopupDo(menu, CENTER, CENTER, 0);
-		if(s == 1) options_menu();
-	} while(s != 0 && s != 2);
+		s = PopupDo(menu, CENTER, CENTER, s);
+		if(s == 1) {
+			options_menu();
+		} else if(s == 2) {
+			r = state_menu("GB68K - Save State");
+			if(r) save_state(r - 1);
+		} else if(s == 3) {
+			r = state_menu("GB68K - Load State");
+			if(r) load_state(r - 1);
+		}
+		if(gb_data->error != ERROR_NONE) {
+			DlgMessage("ERROR", "Load/Save State problem", BT_OK, BT_NONE);
+			gb_data->error = ERROR_NONE;
+		}
+	} while(s != 0 && s != 4);
 	HeapFree(menu);
 	
-	if(s == 2) return 1; //quit
+	if(s == 4) return 1; //quit
 	else return 0; //don't quit
 }	

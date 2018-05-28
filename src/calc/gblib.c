@@ -14,8 +14,8 @@ DLL_ID GB_ID
 DLL_VERSION DLL_MAJOR, DLL_MINOR
 DLL_EXPORTS
 
-save_state,
-load_state,
+save_sram,
+load_sram,
 file_pointer,
 select_rom,
 init_rom,

@@ -7,6 +7,7 @@
 .global P1_89
 .global P1_92
 .global io_write_table
+.global io_write_size_table
 .global io_write_offset
 .global bg_gfx_write_offsets
 .global mbc1_offsets
@@ -17,10 +18,6 @@
 .global write_disable_offset
 
 .include "gbasm.h"
-
-|Write functions
-|inputs: %d0 - offset into block, %d3 - index of block * 8, %d2 - data to write
-|outputs: data is written
 
 .even
 P1_89:
@@ -61,8 +58,8 @@ bg_gfx_write_offsets:
 .word bg_gfx_write17 - function_base
 
 mbc1_offsets:
-.word write_disable - function_base
-.word write_disable - function_base
+.word mbcX_0000 - function_base
+.word mbcX_0000 - function_base
 .word mbc1_2000 - function_base
 .word mbc1_2000 - function_base
 .word mbc1_4000 - function_base
@@ -71,8 +68,8 @@ mbc1_offsets:
 .word mbc1_6000 - function_base
 
 mbc2_offsets:
-.word write_disable - function_base
-.word write_disable - function_base
+.word mbcX_0000 - function_base
+.word mbcX_0000 - function_base
 .word mbc2_2000 - function_base
 .word mbc2_2000 - function_base
 .word write_disable - function_base
@@ -81,18 +78,18 @@ mbc2_offsets:
 .word write_disable - function_base
 
 mbc3_offsets:
-.word write_disable - function_base
-.word write_disable - function_base
+.word mbcX_0000 - function_base
+.word mbcX_0000 - function_base
 .word mbc3_2000 - function_base
 .word mbc3_2000 - function_base
 .word mbc3_4000 - function_base
 .word mbc3_4000 - function_base
-.word write_disable - function_base
-.word write_disable - function_base
+.word mbc3_6000 - function_base
+.word mbc3_6000 - function_base
 
 mbc5_offsets:
-.word write_disable - function_base
-.word write_disable - function_base
+.word mbcX_0000 - function_base
+.word mbcX_0000 - function_base
 .word mbc5_2000 - function_base
 .word write_disable - function_base
 .word write_disable - function_base
@@ -110,8 +107,73 @@ no_mbc_offsets:
 .word write_disable - function_base
 .word write_disable - function_base
 
+.even
+.global bg_gfx_write_size
+bg_gfx_write_size:
+.byte bg_gfx_write01 - bg_gfx_write00
+
+.global io_write_size
+io_write_size:
+.byte end_io_write - io_write
+
+.global mbc1_size_table
+mbc1_size_table:
+.byte end_mbcX_0000 - mbcX_0000
+.byte end_mbcX_0000 - mbcX_0000
+.byte end_mbc1_2000 - mbc1_2000
+.byte end_mbc1_2000 - mbc1_2000
+.byte end_mbc1_4000 - mbc1_4000
+.byte end_mbc1_4000 - mbc1_4000
+.byte end_mbc1_6000 - mbc1_6000
+.byte end_mbc1_6000 - mbc1_6000
+
+.global mbc2_size_table
+mbc2_size_table:
+.byte end_mbcX_0000 - mbcX_0000
+.byte end_mbcX_0000 - mbcX_0000
+.byte end_mbc2_2000 - mbc2_2000
+.byte end_mbc2_2000 - mbc2_2000
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+
+.global mbc3_size_table
+mbc3_size_table:
+.byte end_mbcX_0000 - mbcX_0000
+.byte end_mbcX_0000 - mbcX_0000
+.byte end_mbc3_2000 - mbc3_2000
+.byte end_mbc3_2000 - mbc3_2000
+.byte end_mbc3_4000 - mbc3_4000
+.byte end_mbc3_4000 - mbc3_4000
+.byte end_mbc3_6000 - mbc3_6000
+.byte end_mbc3_6000 - mbc3_6000
+
+.global mbc5_size_table
+mbc5_size_table:
+.byte end_mbcX_0000 - mbcX_0000
+.byte end_mbcX_0000 - mbcX_0000
+.byte end_mbc5_2000 - mbc5_2000
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+
+.global no_mbc_size_table
+no_mbc_size_table:
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+.byte end_write_disable - write_disable
+
+.even
 function_base:
-.word 0xffff | so functions start with offset of 2, as opposed to 0
+|.word 0xffff | so functions start with offset of 2, as opposed to 0
 
 | write16 stub
 | move.l %a4, -(%a7)
@@ -121,29 +183,28 @@ function_base:
 | requires:
 | upper byte of d2
 | lower byte of d0
-| d3
-.global write16_finish
+/*.global write16_finish
 write16_finish:
 	move.l (SAVE_EVENT_MEM16, %a5), (NEXT_EVENT, %a5)
 	move.w (SAVE_COUNT_MEM16, %a5), %d4
 	
+	movea.l (MEM_WRITE16_BASE, %a5), %a1
 	rol.w #8, %d2 | get proper byte in d2
 	addq.b #1, %d0 | incr address
 	bcc 0f
-	addq.w #8, %d3 | crossed into next section
+	adda.l #256, %a1 | crossed into next section
 0:
-	lea (MEM_TABLE, %a5, %d3.w), %a1
-	movea.l (%a1)+, %a0 | get base pointer
-	move.w (%a1), %d1 | get special function
+	movea.l (%a1)+, %a0
+	move.w (%a1), %d1
 	beq 0f
 	jmp (%a3, %d1.w)
 0:
 	move.b %d2, (%a0, %d0.w) | no special function
-	tst.w %d4
+	|tst.w %d4
 	NEXT_INSTRUCTION2 end_special_write16
-end_special_write16:
+end_special_write16:*/
 
-| sets timer to the proper state (enabled or disabled)
+| given that enable_timer flag is set, sets timer to the proper state (enabled or disabled)
 .global reset_timer
 reset_timer:
 	tst.b (ENABLE_TIMER, %a5)
@@ -152,7 +213,7 @@ reset_timer:
 	movea.l #(io_write_TAC - function_base), %a0
 	move.w %a0, (io_write_table + TAC * 2)
 	
-	movea.l (MEM_TABLE+2040, %a5), %a0
+	movea.l (-1*256+2, %a6), %a0
 	move.b (TAC, %a0), %d0
 	btst #2, %d0
 	beq reset_timer_off
@@ -184,40 +245,11 @@ disable_timer:
 	move.w %a0, (io_write_table + TAC * 2)
 	rts
 
-/*.global write16_stack_finish
-.global write16_stack_return
-write16_stack_finish:
-	rol.w #8, %d2 | get proper byte in d2
-	addq.b #1, %d0 | incr address
-	bcc 0f
-	addq.w #8, %d3 | crossed into next section
-0:
-	lea (MEM_TABLE, %a5, %d3.w), %a1
-	movea.l (%a1)+, %a0 | get base pointer
-	move.w (%a1), %d1 | get special function
-	beq 0f
-	move.l #write16_stack_return, (NEXT_EVENT, %a5) | set return point
-	jmp (%a3, %d1.w)
-0:
-	move.b %d2, (%a0, %d0.w) | no special function
-write16_stack_return:
-	move.l (%a7)+, %d2 | saved by push_PC
-	move.l (SAVE_EVENT_MEM16, %a5), (NEXT_EVENT, %a5)
-	move.w (SAVE_COUNT_MEM16, %a5), %d4
-	rts | return (from push_PC)
-*/
-
-| io_write_P1 -->
-| io_write_table + io_write_P1 - io_write_table -->
-| (io_write_table) + (io_write_P1 - io_write_table) -->
-| (pc + 2) + (io_write_P1 - io_write_table) -->
-| (pc) + (2 + io_write_P1 - io_write_table) -->
-| (pc) + (a1)
 io_write:
-	move.w %d0, %a1
-	adda.w %a1, %a1
-	move.w (io_write_table, %pc, %a1.w), %a1
-	jmp (%a3, %a1.w)
+	move.b %d0, (end_io_write - io_write - 256 - 2 + 6, %a6)
+	jmp (0x7f00+6+MEM_WRITE_SIZE, %a6)
+end_io_write:
+	
 io_write_table:
 .word io_write_P1_89 - function_base	| 00 - P1
 .word io_write_default - function_base	| 01 - SB
@@ -476,186 +508,448 @@ io_write_table:
 .word io_write_default - function_base	| FE - HRAM
 .word io_write_IE - function_base	| FF - IE
 
+io_write_size_table:
+.byte 0/*end_io_write_P1 - io_write_P1*/	| 00
+.byte end_io_write_default - io_write_default	| 01
+.byte end_io_write_SC - io_write_SC		| 02
+.byte end_io_write_default - io_write_default	| 03
+.byte end_io_write_DIV - io_write_DIV		| 04
+.byte end_io_write_default - io_write_default	| 05
+.byte end_io_write_default - io_write_default	| 06
+.byte 0/*end_io_write_TAC - io_write_TAC*/	| 07
+.byte end_io_write_default - io_write_default	| 08
+.byte end_io_write_default - io_write_default	| 09
+.byte end_io_write_default - io_write_default	| 0A
+.byte end_io_write_default - io_write_default	| 0B
+.byte end_io_write_default - io_write_default	| 0C
+.byte end_io_write_default - io_write_default	| 0D
+.byte end_io_write_default - io_write_default	| 0E
+.byte end_io_write_IF - io_write_IF		| 0F
+.byte end_io_write_default - io_write_default	| 10
+.byte end_io_write_default - io_write_default	| 11
+.byte end_io_write_default - io_write_default	| 12
+.byte end_io_write_default - io_write_default	| 13
+.byte end_io_write_default - io_write_default	| 14
+.byte end_io_write_default - io_write_default	| 15
+.byte end_io_write_default - io_write_default	| 16
+.byte end_io_write_default - io_write_default	| 17
+.byte end_io_write_default - io_write_default	| 18
+.byte end_io_write_default - io_write_default	| 19
+.byte end_io_write_default - io_write_default	| 1A
+.byte end_io_write_default - io_write_default	| 1B
+.byte end_io_write_default - io_write_default	| 1C
+.byte end_io_write_default - io_write_default	| 1D
+.byte end_io_write_default - io_write_default	| 1E
+.byte end_io_write_default - io_write_default	| 1F
+.byte end_io_write_default - io_write_default	| 20
+.byte end_io_write_default - io_write_default	| 21
+.byte end_io_write_default - io_write_default	| 22
+.byte end_io_write_default - io_write_default	| 23
+.byte end_io_write_default - io_write_default	| 24
+.byte end_io_write_default - io_write_default	| 25
+.byte end_io_write_default - io_write_default	| 26
+.byte end_io_write_default - io_write_default	| 27
+.byte end_io_write_default - io_write_default	| 28
+.byte end_io_write_default - io_write_default	| 29
+.byte end_io_write_default - io_write_default	| 2A
+.byte end_io_write_default - io_write_default	| 2B
+.byte end_io_write_default - io_write_default	| 2C
+.byte end_io_write_default - io_write_default	| 2D
+.byte end_io_write_default - io_write_default	| 2E
+.byte end_io_write_default - io_write_default	| 2F
+.byte end_io_write_default - io_write_default	| 30
+.byte end_io_write_default - io_write_default	| 31
+.byte end_io_write_default - io_write_default	| 32
+.byte end_io_write_default - io_write_default	| 33
+.byte end_io_write_default - io_write_default	| 34
+.byte end_io_write_default - io_write_default	| 35
+.byte end_io_write_default - io_write_default	| 36
+.byte end_io_write_default - io_write_default	| 37
+.byte end_io_write_default - io_write_default	| 38
+.byte end_io_write_default - io_write_default	| 39
+.byte end_io_write_default - io_write_default	| 3A
+.byte end_io_write_default - io_write_default	| 3B
+.byte end_io_write_default - io_write_default	| 3C
+.byte end_io_write_default - io_write_default	| 3D
+.byte end_io_write_default - io_write_default	| 3E
+.byte end_io_write_default - io_write_default	| 3F
+.byte end_io_write_LCDC - io_write_LCDC		| 40
+.byte end_io_write_STAT - io_write_STAT		| 41
+.byte end_io_write_default - io_write_default	| 42
+.byte end_io_write_default - io_write_default	| 43
+.byte end_io_write_LY - io_write_LY		| 44
+.byte end_io_write_default - io_write_default	| 45
+.byte end_io_write_DMA - io_write_DMA		| 46
+.byte end_io_write_BGP - io_write_BGP		| 47
+.byte end_io_write_OBP0 - io_write_OBP0		| 48
+.byte end_io_write_OBP1 - io_write_OBP1		| 49
+.byte end_io_write_default - io_write_default	| 4A
+.byte end_io_write_default - io_write_default	| 4B
+.byte end_io_write_default - io_write_default	| 4C
+.byte end_io_write_default - io_write_default	| 4D
+.byte end_io_write_default - io_write_default	| 4E
+.byte end_io_write_default - io_write_default	| 4F
+.byte end_io_write_default - io_write_default	| 50
+.byte end_io_write_default - io_write_default	| 51
+.byte end_io_write_default - io_write_default	| 52
+.byte end_io_write_default - io_write_default	| 53
+.byte end_io_write_default - io_write_default	| 54
+.byte end_io_write_default - io_write_default	| 55
+.byte end_io_write_default - io_write_default	| 56
+.byte end_io_write_default - io_write_default	| 57
+.byte end_io_write_default - io_write_default	| 58
+.byte end_io_write_default - io_write_default	| 59
+.byte end_io_write_default - io_write_default	| 5A
+.byte end_io_write_default - io_write_default	| 5B
+.byte end_io_write_default - io_write_default	| 5C
+.byte end_io_write_default - io_write_default	| 5D
+.byte end_io_write_default - io_write_default	| 5E
+.byte end_io_write_default - io_write_default	| 5F
+.byte end_io_write_default - io_write_default	| 60
+.byte end_io_write_default - io_write_default	| 61
+.byte end_io_write_default - io_write_default	| 62
+.byte end_io_write_default - io_write_default	| 63
+.byte end_io_write_default - io_write_default	| 64
+.byte end_io_write_default - io_write_default	| 65
+.byte end_io_write_default - io_write_default	| 66
+.byte end_io_write_default - io_write_default	| 67
+.byte end_io_write_default - io_write_default	| 68
+.byte end_io_write_default - io_write_default	| 69
+.byte end_io_write_default - io_write_default	| 6A
+.byte end_io_write_default - io_write_default	| 6B
+.byte end_io_write_default - io_write_default	| 6C
+.byte end_io_write_default - io_write_default	| 6D
+.byte end_io_write_default - io_write_default	| 6E
+.byte end_io_write_default - io_write_default	| 6F
+.byte end_io_write_default - io_write_default	| 70
+.byte end_io_write_default - io_write_default	| 71
+.byte end_io_write_default - io_write_default	| 72
+.byte end_io_write_default - io_write_default	| 73
+.byte end_io_write_default - io_write_default	| 74
+.byte end_io_write_default - io_write_default	| 75
+.byte end_io_write_default - io_write_default	| 76
+.byte end_io_write_default - io_write_default	| 77
+.byte end_io_write_default - io_write_default	| 78
+.byte end_io_write_default - io_write_default	| 79
+.byte end_io_write_default - io_write_default	| 7A
+.byte end_io_write_default - io_write_default	| 7B
+.byte end_io_write_default - io_write_default	| 7C
+.byte end_io_write_default - io_write_default	| 7D
+.byte end_io_write_default - io_write_default	| 7E
+.byte end_io_write_default - io_write_default	| 7F
+.byte end_io_write_default - io_write_default	| 80
+.byte end_io_write_default - io_write_default	| 81
+.byte end_io_write_default - io_write_default	| 82
+.byte end_io_write_default - io_write_default	| 83
+.byte end_io_write_default - io_write_default	| 84
+.byte end_io_write_default - io_write_default	| 85
+.byte end_io_write_default - io_write_default	| 86
+.byte end_io_write_default - io_write_default	| 87
+.byte end_io_write_default - io_write_default	| 88
+.byte end_io_write_default - io_write_default	| 89
+.byte end_io_write_default - io_write_default	| 8A
+.byte end_io_write_default - io_write_default	| 8B
+.byte end_io_write_default - io_write_default	| 8C
+.byte end_io_write_default - io_write_default	| 8D
+.byte end_io_write_default - io_write_default	| 8E
+.byte end_io_write_default - io_write_default	| 8F
+.byte end_io_write_default - io_write_default	| 90
+.byte end_io_write_default - io_write_default	| 91
+.byte end_io_write_default - io_write_default	| 92
+.byte end_io_write_default - io_write_default	| 93
+.byte end_io_write_default - io_write_default	| 94
+.byte end_io_write_default - io_write_default	| 95
+.byte end_io_write_default - io_write_default	| 96
+.byte end_io_write_default - io_write_default	| 97
+.byte end_io_write_default - io_write_default	| 98
+.byte end_io_write_default - io_write_default	| 99
+.byte end_io_write_default - io_write_default	| 9A
+.byte end_io_write_default - io_write_default	| 9B
+.byte end_io_write_default - io_write_default	| 9C
+.byte end_io_write_default - io_write_default	| 9D
+.byte end_io_write_default - io_write_default	| 9E
+.byte end_io_write_default - io_write_default	| 9F
+.byte end_io_write_default - io_write_default	| A0
+.byte end_io_write_default - io_write_default	| A1
+.byte end_io_write_default - io_write_default	| A2
+.byte end_io_write_default - io_write_default	| A3
+.byte end_io_write_default - io_write_default	| A4
+.byte end_io_write_default - io_write_default	| A5
+.byte end_io_write_default - io_write_default	| A6
+.byte end_io_write_default - io_write_default	| A7
+.byte end_io_write_default - io_write_default	| A8
+.byte end_io_write_default - io_write_default	| A9
+.byte end_io_write_default - io_write_default	| AA
+.byte end_io_write_default - io_write_default	| AB
+.byte end_io_write_default - io_write_default	| AC
+.byte end_io_write_default - io_write_default	| AD
+.byte end_io_write_default - io_write_default	| AE
+.byte end_io_write_default - io_write_default	| AF
+.byte end_io_write_default - io_write_default	| B0
+.byte end_io_write_default - io_write_default	| B1
+.byte end_io_write_default - io_write_default	| B2
+.byte end_io_write_default - io_write_default	| B3
+.byte end_io_write_default - io_write_default	| B4
+.byte end_io_write_default - io_write_default	| B5
+.byte end_io_write_default - io_write_default	| B6
+.byte end_io_write_default - io_write_default	| B7
+.byte end_io_write_default - io_write_default	| B8
+.byte end_io_write_default - io_write_default	| B9
+.byte end_io_write_default - io_write_default	| BA
+.byte end_io_write_default - io_write_default	| BB
+.byte end_io_write_default - io_write_default	| BC
+.byte end_io_write_default - io_write_default	| BD
+.byte end_io_write_default - io_write_default	| BE
+.byte end_io_write_default - io_write_default	| BF
+.byte end_io_write_default - io_write_default	| C0
+.byte end_io_write_default - io_write_default	| C1
+.byte end_io_write_default - io_write_default	| C2
+.byte end_io_write_default - io_write_default	| C3
+.byte end_io_write_default - io_write_default	| C4
+.byte end_io_write_default - io_write_default	| C5
+.byte end_io_write_default - io_write_default	| C6
+.byte end_io_write_default - io_write_default	| C7
+.byte end_io_write_default - io_write_default	| C8
+.byte end_io_write_default - io_write_default	| C9
+.byte end_io_write_default - io_write_default	| CA
+.byte end_io_write_default - io_write_default	| CB
+.byte end_io_write_default - io_write_default	| CC
+.byte end_io_write_default - io_write_default	| CD
+.byte end_io_write_default - io_write_default	| CE
+.byte end_io_write_default - io_write_default	| CF
+.byte end_io_write_default - io_write_default	| D0
+.byte end_io_write_default - io_write_default	| D1
+.byte end_io_write_default - io_write_default	| D2
+.byte end_io_write_default - io_write_default	| D3
+.byte end_io_write_default - io_write_default	| D4
+.byte end_io_write_default - io_write_default	| D5
+.byte end_io_write_default - io_write_default	| D6
+.byte end_io_write_default - io_write_default	| D7
+.byte end_io_write_default - io_write_default	| D8
+.byte end_io_write_default - io_write_default	| D9
+.byte end_io_write_default - io_write_default	| DA
+.byte end_io_write_default - io_write_default	| DB
+.byte end_io_write_default - io_write_default	| DC
+.byte end_io_write_default - io_write_default	| DD
+.byte end_io_write_default - io_write_default	| DE
+.byte end_io_write_default - io_write_default	| DF
+.byte end_io_write_default - io_write_default	| E0
+.byte end_io_write_default - io_write_default	| E1
+.byte end_io_write_default - io_write_default	| E2
+.byte end_io_write_default - io_write_default	| E3
+.byte end_io_write_default - io_write_default	| E4
+.byte end_io_write_default - io_write_default	| E5
+.byte end_io_write_default - io_write_default	| E6
+.byte end_io_write_default - io_write_default	| E7
+.byte end_io_write_default - io_write_default	| E8
+.byte end_io_write_default - io_write_default	| E9
+.byte end_io_write_default - io_write_default	| EA
+.byte end_io_write_default - io_write_default	| EB
+.byte end_io_write_default - io_write_default	| EC
+.byte end_io_write_default - io_write_default	| ED
+.byte end_io_write_default - io_write_default	| EE
+.byte end_io_write_default - io_write_default	| EF
+.byte end_io_write_default - io_write_default	| F0
+.byte end_io_write_default - io_write_default	| F1
+.byte end_io_write_default - io_write_default	| F2
+.byte end_io_write_default - io_write_default	| F3
+.byte end_io_write_default - io_write_default	| F4
+.byte end_io_write_default - io_write_default	| F5
+.byte end_io_write_default - io_write_default	| F6
+.byte end_io_write_default - io_write_default	| F7
+.byte end_io_write_default - io_write_default	| F8
+.byte end_io_write_default - io_write_default	| F9
+.byte end_io_write_default - io_write_default	| FA
+.byte end_io_write_default - io_write_default	| FB
+.byte end_io_write_default - io_write_default	| FC
+.byte end_io_write_default - io_write_default	| FD
+.byte end_io_write_default - io_write_default	| FE
+.byte end_io_write_IE - io_write_IE		| FF
+
 io_write_default:
-	move.b %d2, (%a0, %d0.w)
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_default
+	move.b %d1, (%a0, %d0.w)
 end_io_write_default:
 
 | d0 is keys from calc
 | d1 is current bit
 | d2 is keys written to GB
 io_write_P1_89:
+	jmp (get_keys_89-function_base, %a3)
+	
+io_write_P1_92:
+	jmp (get_keys_92-function_base, %a3)
+		
+get_keys_89:
 	move.w #0xfffe, 0x600018 | select row 0
-	move.w #24, %d1
+	move.w #24, %d0
 0:
-	dbra %d1, 0b | wait
-	move.b 0x60001B, %d1 | read keys from port
-	btst #5, %d2
+	dbra %d0, 0b | wait
+	move.b 0x60001B, %d0 | read keys from port
+	btst #5, %d1
 	beq button_select_89
-	btst #4, %d2
+	btst #4, %d1
 	bne keypad_disabled
-	st %d2
-	btst #0, %d1
+	st %d1
+	btst #0, %d0
 	bne up_not_pressed_89
-	bclr #2, %d2
+	bclr #2, %d1
 up_not_pressed_89:
-	btst #1, %d1
+	btst #1, %d0
 	bne left_not_pressed_89
-	bclr #1, %d2
+	bclr #1, %d1
 left_not_pressed_89:
-	btst #2, %d1
+	btst #2, %d0
 	bne down_not_pressed_89
-	bclr #3, %d2
+	bclr #3, %d1
 down_not_pressed_89:
-	btst #3, %d1
+	btst #3, %d0
 	bne keys_done
-	bclr #0, %d2
+	bclr #0, %d1
 keys_done:
-	ori.b #0xf0, %d2
-	move.b %d2, (P1, %a0)
-	tst.w %d4
-	NEXT_INSTRUCTION2 button_select_89
-button_select_89:
-	lsr.b #4, %d1
 	ori.b #0xf0, %d1
 	move.b %d1, (P1, %a0)
-	tst.w %d4
+	NEXT_INSTRUCTION2 button_select_89
+button_select_89:
+	lsr.b #4, %d0
+	ori.b #0xf0, %d0
+	move.b %d0, (P1, %a0)
 	NEXT_INSTRUCTION2 keypad_disabled
 keypad_disabled:
 	st (P1, %a0)
-	tst.w %d4
 	NEXT_INSTRUCTION2 end_io_write_P1_89
 end_io_write_P1_89:
 
-io_write_P1_92:
+get_keys_92:
 	move.w #0xfffe, 0x600018 | select row 0
-	move.w #24, %d1
+	move.w #24, %d0
 0:
-	dbra %d1, 0b | wait
-	move.b 0x60001B, %d1 | read keys from port
-	btst #5, %d2
-	beq button_select_92
-	btst #4, %d2
-	bne keypad_disabled
-	st %d2
+	dbra %d0, 0b | wait
+	move.b 0x60001B, %d0 | read keys from port
 	btst #5, %d1
-	bne up_not_pressed_92
-	bclr #2, %d2
-up_not_pressed_92:
+	beq button_select_92
 	btst #4, %d1
+	bne keypad_disabled
+	st %d1
+	btst #5, %d0
+	bne up_not_pressed_92
+	bclr #2, %d1
+up_not_pressed_92:
+	btst #4, %d0
 	bne left_not_pressed_92
-	bclr #1, %d2
+	bclr #1, %d1
 left_not_pressed_92:
-	btst #7, %d1
+	btst #7, %d0
 	bne down_not_pressed_92
-	bclr #3, %d2
+	bclr #3, %d1
 down_not_pressed_92:
-	btst #6, %d1
+	btst #6, %d0
 	bne keys_done
-	bclr #0, %d2
+	bclr #0, %d1
 	bra keys_done
 button_select_92:
-	st %d2
+	st %d1
 	cmp.b #3, (CALC_TYPE, %a5)
 	beq button_select_v200
 	move.w #~(1<<6), 0x600018 | select row 6
-	move.w #24, %d1
+	move.w #24, %d0
 0:
-	dbra %d1, 0b | wait
-	move.b 0x60001B, %d1 | read keys from port
-	btst #6, %d1
+	dbra %d0, 0b | wait
+	move.b 0x60001B, %d0 | read keys from port
+	btst #6, %d0
 	bne start_not_pressed_92
-	bclr #3, %d2
+	bclr #3, %d1
 start_not_pressed_92:
-	btst #4, %d1
+	btst #4, %d0
 	bne a_not_pressed_92
-	bclr #0, %d2
+	bclr #0, %d1
 a_not_pressed_92:
 	move.w #~(1<<7), 0x600018 | select row 7
-	move.w #24, %d1
+	move.w #24, %d0
 0:
-	dbra %d1, 0b | wait
-	move.b 0x60001B, %d1 | read keys from port
-	btst #6, %d1
+	dbra %d0, 0b | wait
+	move.b 0x60001B, %d0 | read keys from port
+	btst #6, %d0
 	bne select_not_pressed_92
-	bclr #2, %d2
+	bclr #2, %d1
 select_not_pressed_92:
-	btst #4, %d1
+	btst #4, %d0
 	bne keys_done
-	bclr #1, %d2
+	bclr #1, %d1
 	bra keys_done
 button_select_v200:
-	btst #3, %d1
+	btst #3, %d0
 	bne a_not_pressed_v200
-	bclr #0, %d2
+	bclr #0, %d1
 a_not_pressed_v200:
 	move.w #~(1<<9), 0x600018 | select row 9
-	move.w #24, %d1
+	move.w #24, %d0
 0:
-	dbra %d1, 0b | wait
-	move.b 0x60001B, %d1 | read keys from port
-	btst #3, %d1
+	dbra %d0, 0b | wait
+	move.b 0x60001B, %d0 | read keys from port
+	btst #3, %d0
 	bne b_not_pressed_v200
-	bclr #1, %d2
+	bclr #1, %d1
 b_not_pressed_v200:
 	move.w #~(1<<6), 0x600018 | select row 6
-	move.w #24, %d1
+	move.w #24, %d0
 0:
-	dbra %d1, 0b | wait
-	move.b 0x60001B, %d1 | read keys from port
-	btst #6, %d1
+	dbra %d0, 0b | wait
+	move.b 0x60001B, %d0 | read keys from port
+	btst #6, %d0
 	bne start_not_pressed_v200
-	bclr #3, %d2
+	bclr #3, %d1
 start_not_pressed_v200:
 	move.w #~(1<<7), 0x600018 | select row 7
-	move.w #24, %d1
+	move.w #24, %d0
 0:
-	dbra %d1, 0b | wait
-	move.b 0x60001B, %d1 | read keys from port
-	btst #6, %d1
+	dbra %d0, 0b | wait
+	move.b 0x60001B, %d0 | read keys from port
+	btst #6, %d0
 	bne keys_done
-	bclr #2, %d2
+	bclr #2, %d1
 	bra keys_done
 	
 io_write_SC:
-	btst #0, %d2 | don't generate int if using external clock
+	tst.b (ENABLE_SERIAL, %a5) | should we even try?
 	beq 0f
-	bclr #7, %d2 | if a transfer is requested, generate an int imediately
+	btst #0, %d1 | don't generate int if using external clock
+	beq 0f
+	bclr #7, %d1 | if a transfer is requested, generate an int imediately
 	beq 0f
 	move.b #0xff, (SB, %a0) | no external gb present, default to 0xff
 	bset #3, (IF, %a0)
-	jbsr check_interrupts
+	lea (0f, %pc), %a1
+	jmp (check_interrupts-function_base, %a3)
 0:
-	move.b %d2, (SC, %a0)
-	NEXT_INSTRUCTION2 end_io_write_SC
+	move.b %d1, (SC, %a0)
 end_io_write_SC:
 	
 io_write_IF:
-	move.b %d2, (IF, %a0)
-	jbsr check_interrupts
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_IF
+	move.b %d1, (IF, %a0)
+	lea (0f, %pc), %a1
+	jmp (check_interrupts-function_base, %a3) 
+0:
 end_io_write_IF:
 
 io_write_IE:
-	move.b %d2, (IE, %a0)
-	jbsr check_interrupts
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_IE
+	move.b %d1, (IE, %a0)
+	lea (0f, %pc), %a1
+	jmp (check_interrupts-function_base, %a3)
+0:
 end_io_write_IE:
 
 io_write_DIV:
 	clr.b (DIV, %a0)
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_DIV
 end_io_write_DIV:
 
 io_write_TAC:
-	move.b %d2, %d0
+	jmp (write_TAC-function_base, %a3)
+
+write_TAC:
+	move.b %d1, %d0
 	or.b #0xf8, %d0
 	move.b %d0, (TAC, %a0)
-	btst #2, %d2
+	btst #2, %d1
 	beq timer_off
 	and.w #0x0003, %d0
 	add.b %d0, %d0
@@ -679,41 +973,20 @@ timer_off:
 	move.w #0x4E71, (timer_entry) | (timer_entry) = NOP
 	move.l #0x4E714E71, (timer_entry_off) | (timer_entry_off) = NOP; NOP
 0:
-	NEXT_INSTRUCTION2 end_io_write_TAC
-end_io_write_TAC:
+	NEXT_INSTRUCTION2 end_write_TAC
+end_write_TAC:
 
 
 io_write_LY:
 	clr.b (LY, %a0)
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_LY
 end_io_write_LY:
 
-io_write_LCDC:
+.global reset_LCDC
+reset_LCDC:
+	movea.l (-1*256+2, %a6), %a0
 	move.b (LCDC, %a0), %d0
-	move.b %d2, (LCDC, %a0)
-	eor.b %d2, %d0
-	moveq #7, %d1
-	btst %d1, %d0
-	beq no_lcdc_lcd_enable
-| bit7 - lcd enable was changed
-	moveq #-1, %d4
-	btst %d1, %d2
-	beq lcd_off
-| LCD was turned on
-	move.l #mode2_func, (NEXT_EVENT, %a5)
-	bra no_lcdc_lcd_enable
-lcd_off:
-| LCD was turned off
-	clr.b (LY, %a0)
-	move.l #mode2_func_off, (NEXT_EVENT, %a5)
-no_lcdc_lcd_enable:
-	subq.b #1, %d1
-	btst %d1, %d0
-	beq no_lcdc_window_tilemap
-| bit 6 - window tilemap was changed
-	movea.l (MEM_TABLE+1024, %a5), %a0
-	btst %d1, %d2
+	movea.l (-128*256+2, %a6), %a0
+	btst #6, %d0 | bit 6 - window tilemap
 	beq window_tilemap0
 	lea (%a0, TILEMAP1), %a0
 	bra 0f
@@ -721,12 +994,7 @@ window_tilemap0:
 	lea (%a0, TILEMAP0), %a0
 0:
 	move.l %a0, (WINDOW_TILEMAP, %a5)
-no_lcdc_window_tilemap:
-	subq.b #2, %d1
-	btst %d1, %d0
-	beq no_lcdc_bg_tiledata
-| bit 4 - bg tiledata was chenged
-	btst %d1, %d2
+	btst #4, %d0 | bit 4 - bg tiledata
 	beq bg_tiledata0
 | TILEDATA1 (8000-8FFF)
 	lea bg_next_tile, %a0
@@ -741,9 +1009,9 @@ no_lcdc_window_tilemap:
 	move.l %a0, (BG_WINDOW_UPDATE_PAL, %a5)
 	lea (BG_GFX, %a5), %a0
 	move.l %a0, (BG_WINDOW_GFX, %a5)
-	movea.l (MEM_TABLE+1024, %a5), %a0
+	movea.l (-128*256+2, %a6), %a0
 	move.l %a0, (BG_WINDOW_TILEDATA, %a5)
-	bra no_lcdc_bg_tiledata
+	bra 0f
 bg_tiledata0:
 | TILEDATA0 (8800-97FF)
 	lea bg_next_tile, %a0
@@ -758,16 +1026,12 @@ bg_tiledata0:
 	move.l %a0, (BG_WINDOW_UPDATE_PAL, %a5)
 	lea (BG_GFX+0x1000, %a5), %a0
 	move.l %a0, (BG_WINDOW_GFX, %a5)
-	movea.l (MEM_TABLE+1024, %a5), %a0
+	movea.l (-128*256+2, %a6), %a0
 	lea (0x1000, %a0), %a0
 	move.l %a0, (BG_WINDOW_TILEDATA, %a5)
-no_lcdc_bg_tiledata:
-	subq.b #1, %d1
-	btst %d1, %d0
-	beq no_lcdc_bg_tilemap
-| bit 3 - bg tilemap was changed
-	movea.l (MEM_TABLE+1024, %a5), %a0
-	btst %d1, %d2
+0:
+	movea.l (-128*256+2, %a6), %a0
+	btst #3, %d0 | bit 3 - bg tilemap
 	beq bg_tilemap0
 	lea (%a0, TILEMAP1), %a0
 	bra 0f
@@ -775,41 +1039,111 @@ bg_tilemap0:
 	lea (%a0, TILEMAP0), %a0
 0:
 	move.l %a0, (BG_TILEMAP, %a5)
-no_lcdc_bg_tilemap:
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_LCDC
+	rts
+	
+io_write_LCDC:
+	move.b (LCDC, %a0), %d0
+	move.b %d1, (LCDC, %a0)
+	eor.b %d1, %d0
+	bpl no_lcdc_lcd_enable
+| bit7 - lcd enable was changed
+	clr.b (LY, %a0)
+	moveq #-1, %d4
+	btst #7, %d1
+	beq lcd_off
+| LCD was turned on
+	move.l #mode2_func, (NEXT_EVENT, %a5)
+	bra no_lcdc_lcd_enable
+lcd_off:
+| LCD was turned off
+	move.l #mode2_func_off, (NEXT_EVENT, %a5)
+no_lcdc_lcd_enable:
+	jsr (reset_LCDC-function_base, %a3)
 end_io_write_LCDC:
 
 io_write_STAT:
 	andi.b #0x07, (STAT, %a0)
-	andi.b #0xf8, %d2
-	or.b %d2, (STAT, %a0)
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_STAT
+	move.b %d1, %d0
+	andi.b #0xf8, %d0
+	or.b %d0, (STAT, %a0)
+	jsr (reset_stat-function_base, %a3)
 end_io_write_STAT:
 
+.global reset_stat
+reset_stat:
+	movea.l (-1*256+2, %a6), %a0
+	move.b (STAT, %a0), %d0
+	btst #6, %d0
+	sne %d1
+	and.b #0x02, %d1 | d0[6] -> d1
+	move.b %d1, (stat_patch_mode1_coincidence+3)
+	move.b %d1, (stat_patch_mode2_coincidence+3)
+	btst #5, %d0
+	sne %d1
+	and.b #0x02, %d1 | d0[6] -> d1
+	move.b %d1, (stat_patch_mode2_int+3)
+	btst #4, %d0
+	sne %d1
+	and.b #0x02, %d1 | d0[6] -> d1
+	move.b %d1, (stat_patch_mode1_int+3)
+	btst #3, %d0
+	sne %d1
+	and.b #0x02, %d1 | d0[6] -> d1
+	move.b %d1, (stat_patch_mode0_int+3)
+	rts
+
+|(6f - opcode%02X%02X + 2 + (%d), %%a6)\n", arg, prefix, opcode_index, offset);
 io_write_DMA:
-	clr.w %d1
-	move.b %d2, %d1
-	lsl.w #3, %d1 | d2 *= 8
-	movea.l (MEM_TABLE, %a5, %d1.w), %a0 | a0 is start of memory to transfer
-	movea.l (MEM_TABLE+2032, %a5), %a1 | a1 is OAM
-	moveq #39, %d1 | counter
+	move.b %d1, (6f - io_write_DMA + 2 + 256*0x46+6+MEM_WRITE_SIZE, %a6)
+6:
+	movea.l (0x7f02, %a6), %a0 | a0 is start of memory to transfer
+	movea.l (-2*256+2, %a6), %a1 | a1 is OAM
+	moveq #39, %d0 | counter
 dma_loop:
 	move.l (%a0)+, (%a1)+
-	dbf %d1, dma_loop
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_DMA
+	dbf %d0, dma_loop
 end_io_write_DMA:
 
-io_write_BGP:
-	move.b %d2, (BGP, %a0) | write data to IO
-	lea (BG_PALETTE+8, %a5), %a0 | a0 is pointer to internal palette structure
-	moveq #7, %d1 | d0 is counter
+.global reset_palette
+reset_palette:
+	movea.l (-1*256+2, %a6), %a0
+	move.b (BGP, %a0), %d0
+	lea (BG_PALETTE+8, %a5), %a1 | a1 is pointer to internal palette structure
+	moveq #7, %d1 | d1 is counter
 0:
-	btst %d1, %d2
-	sne -(%a0)
+	btst %d1, %d0
+	sne -(%a1)
 	dbf %d1, 0b
+	
+	move.b (OBP0, %a0), %d0
+	lea (OB0_PALETTE, %a5), %a1 | a0 is pointer to internal palette structure
+	moveq #2, %d1 | d0 is bit
+0:
+	btst %d1, %d0
+	sne (%a1)+
+	addq.b #1, %d1
+	cmp.b #8, %d1
+	bne 0b
+	
+	move.b (OBP1, %a0), %d0
+	lea (OB1_PALETTE, %a5), %a1 | a0 is pointer to internal palette structure
+	moveq #2, %d1 | d0 is bit
+0:
+	btst %d1, %d0
+	sne (%a1)+
+	addq.b #1, %d1
+	cmp.b #8, %d1
+	bne 0b
+	rts
+	
+io_write_BGP:
+	move.b %d1, (BGP, %a0) | write data to IO
+	lea (BG_PALETTE+8, %a5), %a0 | a0 is pointer to internal palette structure
+	moveq #7, %d0 | d1 is counter
+0:
+	btst %d0, %d1
+	sne -(%a0)
+	dbf %d0, 0b
 
 	move #95, %d0
 	move.l #0xfefefefe, %d1
@@ -817,20 +1151,18 @@ io_write_BGP:
 0:
 	and.l %d1, (%a0)+
 	dbf %d0, 0b
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_BGP
 end_io_write_BGP:
 
 io_write_OBP0:
-	move.b %d2, (OBP0, %a0) | write data to IO
+	move.b %d1, (OBP0, %a0) | write data to IO
 	lea (OB0_PALETTE, %a5), %a0 | a0 is pointer to internal palette structure
 	moveq #2, %d0 | d0 is bit
-	moveq #5, %d1 | d1 is counter
 0:
-	btst %d0, %d2
+	btst %d0, %d1
 	sne (%a0)+
 	addq.b #1, %d0
-	dbf %d1, 0b
+	cmp.b #8, %d0
+	bne 0b
 
 	move #95, %d0
 	move.l #0xfdfdfdfd, %d1
@@ -838,20 +1170,18 @@ io_write_OBP0:
 0:
 	and.l %d1, (%a0)+
 	dbf %d0, 0b
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_OBP0
 end_io_write_OBP0:
 
 io_write_OBP1:
-	move.b %d2, (OBP1, %a0) | write data to IO
+	move.b %d1, (OBP1, %a0) | write data to IO
 	lea (OB1_PALETTE, %a5), %a0 | a0 is pointer to internal palette structure
 	moveq #2, %d0 | d0 is bit
-	moveq #5, %d1 | d1 is counter
 0:
-	btst %d0, %d2
+	btst %d0, %d1
 	sne (%a0)+
 	addq.b #1, %d0
-	dbf %d1, 0b
+	cmp.b #8, %d0
+	bne 0b
 
 	move #95, %d0
 	move.l #0xfbfbfbfb, %d1
@@ -859,19 +1189,13 @@ io_write_OBP1:
 0:
 	and.l %d1, (%a0)+
 	dbf %d0, 0b
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_io_write_OBP1
 end_io_write_OBP1:
 
 .macro BG_GFX_WRITE offset, lable
-	move.b %d2, (%a0, %d0.w) | write to VRAM
-	clr.w %d1
-	move.b %d0, %d1
-	lsr.b #4, %d1
+	move.b %d1, (%a0, %d0.w) | write to VRAM
+	lsr.b #4, %d0
 	lea (UPDATE_PAL+\offset, %a5), %a0
-	clr.b (%a0, %d1.w)
-	tst.w %d4
-	NEXT_INSTRUCTION2 \lable
+	clr.b (%a0, %d0.w)
 .endm
 
 bg_gfx_write00: BG_GFX_WRITE 0, bg_gfx_write01
@@ -926,91 +1250,196 @@ end_bg_gfx_write:
 2000 - 3fff: rom select (5 bit)
 4000 - 5fff: ram select (2 bit)
 */
+|rtc_write:
+|.word mbc3_rtc - function_base
+
+.global reset_banks
+reset_banks:
+	movem.l %d0-%d7/%a0-%a6, -(%a7)
+	move.b (CURRENT_ROM, %a5), %d0
+	jsr rom_bank_nocheck
+	move.b (CURRENT_RAM, %a5), %d0
+	jsr ram_bank_nocheck
+	movem.l (%a7)+, %d0-%d7/%a0-%a6
+	rts
+	
+ram_write_default_value:
+	move.b %d1, (%a0, %d0.w)
+ram_write_disable_value:
+	nop
+	nop
+ram_write_rtc_value:
+	jsr (mbc3_rtc-function_base, %a3)
+| returns proper ram write func in d1, preserves all other regs	
+get_ram_write:
+	tst.b (RAM_ENABLE, %a5) | if ram is disabled, that's it
+	beq ram_write_disable
+	tst.b (RTC_ENABLE, %a5) | if rtc is set, use that
+	bne ram_write_rtc
+	tst.b (RAM_BANKS, %a5) | if there aren't any ram banks, can't write
+	beq ram_write_disable
+	| regular ram is loaded and enabled, default is fine
+	move.l ram_write_default_value, %d1 | default value
+	rts
+ram_write_disable:
+	move.l ram_write_disable_value, %d1 | write disable
+	rts
+ram_write_rtc:
+	move.l ram_write_rtc_value, %d1
+	rts
+	
+mbcX_0000: | ram enable
+	move.b %d1, %d0
+	and.b #0x0F, %d0
+	cmp.b #0x0A, %d0
+	seq (RAM_ENABLE, %a5)
+	lea (-96*256+6, %a6), %a0 | a1 points to proper mem_ptr
+	jsr (get_ram_write-function_base, %a3)
+	moveq #0, %d0
+	move.b (RAM_BLOCKS, %a5), %d0
+ram_enable_loop:
+	move.l %d1, (%a0)
+	lea (256, %a0), %a0
+	dbf %d0, ram_enable_loop
+end_mbcX_0000:
 
 mbc1_2000: | rom select
-	andi.b #0x1f, %d2 |d2 is bank we need
+	move.b %d1, %d0
+	andi.b #0x1f, %d0
 	seq %d1
-	sub.b %d1, %d2 | add 1 if d2 is 0
-	moveq #0, %d0
-	move.b (CURRENT_ROM, %a5), %d0
-	andi.b #0x60, %d0
-	or.b %d2, %d0
-	cmp.b (CURRENT_ROM, %a5), %d0
-	bne rom_bank
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_mbc1_2000
+	sub.b %d1, %d0
+	move.b (CURRENT_ROM, %a5), %d1
+	andi.b #0x60, %d1
+	or.b %d1, %d0
+	jsr (rom_bank-function_base, %a3)
 end_mbc1_2000:
 
 mbc1_4000: | ram select/upper rom select
-	andi.b #0x03, %d2
+	move.b %d1, %d0
+	andi.b #0x03, %d0
 	tst.b (MBC_MODE, %a5)
-	bne ram_bank
-	lsl.b #5, %d2
-	moveq #0, %d0
-	move.b (CURRENT_ROM, %a5), %d0
-	andi.b #0x1f, %d0
-	or.b %d2, %d0
-	cmp.b (CURRENT_ROM, %a5), %d0
-	bne rom_bank
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_mbc1_4000
+	beq 0f
+0:
+	jsr (ram_bank-function_base, %a3)
+	bra 0f
+	lsl.b #5, %d0
+	moveq #0, %d1
+	move.b (CURRENT_ROM, %a5), %d1
+	andi.b #0x1f, %d1
+	or.b %d1, %d0
+	jsr (rom_bank-function_base, %a3)
+0:
 end_mbc1_4000:
 
 mbc1_6000: | mode select
-	andi.b #0x01, %d2
-	move.b %d2, (MBC_MODE, %a5)
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_mbc1_6000
+	move.b %d1, %d0
+	andi.b #0x01, %d0
+	move.b %d0, (MBC_MODE, %a5)
 end_mbc1_6000:
 
 mbc2_2000: | rom select
-	andi.w #0x000f, %d2
+	move.b %d1, %d0
+	andi.w #0x000f, %d0
 	seq %d1
-	sub.b %d1, %d2 | add 1 if d2 is 0
-	moveq #0, %d0
-	move.b %d2, %d0
-	cmp.b (CURRENT_ROM, %a5), %d0
-	bne rom_bank
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_mbc2_2000
+	sub.b %d1, %d0 | add 1 if d2 is 0
+	jsr (rom_bank-function_base, %a3)
 end_mbc2_2000:
 
 mbc3_2000: | rom select
-	move.b %d2, %d0
+	move.b %d1, %d0
 	andi.w #0x007f, %d0
 	seq %d1
 	sub.b %d1, %d0 | bank0 --> bank1
-	cmp.b (CURRENT_ROM, %a5), %d0
-	bne rom_bank
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_mbc3_2000
+	jsr (rom_bank-function_base, %a3)
 end_mbc3_2000:
 
 mbc3_4000: | ram bank / rtc select
-	andi.b #0x03, %d2
-	bra ram_bank
+	move.b %d1, %d0
+	btst #3, %d0
+	beq 0f | no rtc reg
+	tst.l (RTC_BLOCK, %a5)
+	beq 2f | no rtc installed
+	and.b #0x0F, %d0
+	subq #0x08, %d0
+	st (RTC_ENABLE, %a5)
+	bra 1f	
+0:	
+	andi.b #0x03, %d0
+	clr.b (RTC_ENABLE, %a5)
+1:
+	jsr (ram_bank-function_base, %a3)
+2:
+end_mbc3_4000:
+
+rtc_refresh_values: | copy the selected rtc register into the memory buffer
+	moveq #0, %d0
+	move.b (CURRENT_RAM, %a5), %d0
+	lea (RTC_LATCHED, %a5), %a0
+	move.b (%a0, %d0.w), %d0 | get currently selected rtc reg
+	move.b %d0, %d1
+	lsl.w #8, %d1
+	move.b %d0, %d1
+	move.w %d1, %d0
+	swap %d0
+	move.w %d1, %d0 | copy value into each byte of d0
+	movea.l (RTC_BLOCK, %a5), %a0 | this is where we'll put it
+	move.w #63, %d1 | this is how many times we'll copy it
+rtc_latch_loop:
+	move.l %d0, (%a0)+
+	dbf %d1, rtc_latch_loop
+	rts
+	
+mbc3_6000: | rtc latch
+	| to latch, you need to write a 0, then a 1...
+	| the latch actually occurs if a 1 is written and the current value is 0
+	tst.b (RTC_LATCH, %a5)
+	bne 0f
+	tst.b %d1
+	beq 0f
+	tst.l (RTC_BLOCK, %a5) | is the rtc even installed?
+	beq 0f
+	lea (RTC_CURRENT, %a5), %a0 | update latched values
+	lea (RTC_LATCHED, %a5), %a1
+	move.b (%a0)+, (%a1)+
+	move.b (%a0)+, (%a1)+
+	move.b (%a0)+, (%a1)+
+	move.b (%a0)+, (%a1)+
+	move.b (%a0)+, (%a1)+
+	jsr (rtc_refresh_values-function_base, %a3) | dump them into memory
+0:
+	move.b %d1, (RTC_LATCH, %a5)
+end_mbc3_6000:
+
+mbc3_rtc: | when rtc regs are changed
+	moveq #0, %d0
+	move.b (CURRENT_RAM, %a5), %d0
+	lea (RTC_CURRENT, %a5), %a0
+	move.b %d1, (%a0, %d0.w) | update actual value
+	move.b %d1, (5, %a0, %d0.w) | update latched value
+	jmp (rtc_refresh_values-function_base, %a3) | will return to caller
+end_mbc3_rtc:
 	
 mbc5_2000: | rom select (bits 0 - 7)
-	move.b %d2, %d0
-	andi.w #0x00ff, %d0
-	cmp.b (CURRENT_ROM, %a5), %d0
-	bne rom_bank
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_mbc5_2000
+	moveq #0, %d0
+	move.b %d1, %d0
+	jsr (rom_bank-function_base, %a3)
 end_mbc5_2000:
 	
 rom_bank: |input - %d0, rom bank to switch to
-	| convert PC relative to gb_mem	
+	| convert PC relative to gb_mem
+	cmp.b (CURRENT_ROM, %a5), %d0
+	beq no_bank
 	cmp.b (ROM_BANKS, %a5), %d0
-	bge no_bank
-	
+	bhi no_bank
+
+rom_bank_nocheck:	
 	move.l %a3, -(%sp) | save a3
 
-	move.l %a4, %d2
+	/*move.l %a4, %d2
 	move.w (PC_BASE, %a5), %d1
 	lea (MEM_TABLE, %a5, %d1.w), %a0
 	sub.l (%a0), %d2 | pc now relative to block
-	move.l %a0, -(%sp)
+	move.l %a0, -(%sp)*/
 
 	move.b %d0, (CURRENT_ROM, %a5)
 
@@ -1033,13 +1462,13 @@ rom_bank: |input - %d0, rom bank to switch to
 	moveq #13, %d1
 	lsl.l %d1, %d0 | d0 *= 0x2000 (size of 1 half bank)
 	adda.l %d0, %a0 | a0 now points to proper rom bank
-	lea (MEM_TABLE+512, %a5), %a1 | a1 points to proper mem_ptr
+	lea (64*256+2, %a6), %a1 | a1 points to proper mem_ptr
 	moveq.l #31, %d0 | loop counter
 	move.l #256, %d1
 rom_bank_loop0:
 	move.l %a0, (%a1)
 	adda.l %d1, %a0 | a0 += 256
-	addq.l #8, %a1
+	adda.l %d1, %a1
 	dbf %d0, rom_bank_loop0
 	
 	| do the same thing for second half of bank
@@ -1059,76 +1488,77 @@ rom_bank_loop0:
 rom_bank_loop1:
 	move.l %a0, (%a1)
 	adda.l %d1, %a0 | a0 += 256
-	addq.l #8, %a1
+	adda.l %d1, %a1
 	dbf %d0, rom_bank_loop1
 	
-
 	| convert PC relative to 68k mem
-	move.l (%sp)+, %a0
+	/*move.l (%sp)+, %a0
 	movea.l (%a0), %a4 | pc points to start of block
-	adda.l %d2, %a4 | now pc is correct
+	adda.l %d2, %a4 | now pc is correct*/
 	|jbsr update_reg_indir
 	move.l (%sp)+, %a3 | restore a3
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_rom_bank
-end_rom_bank:
+	rts
 
-ram_bank: |input %d2, ram bank to switch to
-	cmp.b (CURRENT_RAM, %a5), %d2
+ram_bank: |input %d0, ram bank to switch to
+	cmp.b (CURRENT_RAM, %a5), %d0
 	beq no_bank
-	cmp.b (RAM_BANKS, %a5), %d2
+	tst.b (RTC_ENABLE, %a5)
+	bne rtc_bank
+	cmp.b (RAM_BANKS, %a5), %d0
 	bge no_bank
+	
+	/*move.l %a4, %d3
+	move.w (PC_BASE, %a5), %d1
+	lea (MEM_TABLE, %a5, %d1.w), %a0
+	sub.l (%a0), %d3 | pc now relative to block*/
+ram_bank_nocheck:
+	movem.l %a0/%d2, -(%sp)
 
-	move.l %a4, %d3
-	move.w (PC_BASE, %a5), %d0
-	lea (MEM_TABLE, %a5, %d0.w), %a0
-	sub.l (%a0), %d3 | pc now relative to block
-	move.l %a0, -(%sp)
-
-	move.b %d2, (CURRENT_RAM, %a5)
-	and.l #0x000000ff, %d2
+	move.b %d0, (CURRENT_RAM, %a5)
+	and.l #0x000000ff, %d0
 	moveq #13, %d1
-	lsl.l %d1, %d2 | d2 *= 8192 (size of 1 bank)
+	lsl.l %d1, %d0 | d2 *= 8192 (size of 1 bank)
 	movea.l (GB_RAM, %a5), %a0
 	lea (%a0, 0x4200), %a0 | skip to start of internal ram
-	adda.l %d2, %a0 | a0 points to proper bank
-	lea (MEM_TABLE+1280, %a5), %a1 | a1 points to proper mem_ptr
-	moveq.l #31, %d0 | loop counter
-	move.l #256, %d1
+	adda.l %d0, %a0 | a0 points to proper bank
+	lea (-96*256+2, %a6), %a1 | a1 points to proper mem_ptr
+	jsr get_ram_write
+	moveq #0, %d0
+	move.b (RAM_BLOCKS, %a5), %d0
+	move.l #256, %d2
 ram_bank_loop:
-	move.l %a0, (%a1)
-	adda.l %d1, %a0 | a0 += 256
-	addq.l #8, %a1
+	move.l %a0, (%a1)+
+	move.l %d1, (%a1)
+	adda.l %d2, %a0 | a0 += 256
+	|adda.l %d2, %a1 | a1 += 256
+	lea (252, %a1), %a1
+	|addq.l #8, %a1
 	dbf %d0, ram_bank_loop
 	
-	move.l (%sp)+, %a0
-	movea.l (%a0), %a4 | pc points to start of block
-	adda.l %d3, %a4 | now pc is correct
+	movem.l (%sp)+, %a0/%d2
+	|movea.l (%a0), %a4 | pc points to start of block
+	|adda.l %d3, %a4 | now pc is correct
 	|jbsr update_reg_indir
 no_bank:
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_ram_bank
-end_ram_bank:
-
-/*update_reg_indir:
-	clr.w %d3
-	move.b (%a5), %d3
-	lsl.w #3, %d3
-	lea (MEM_TABLE, %a5, %d3.w), %a2
-	move.l (%a2)+, (HL_BASE, %a5)
-	move.w (%a2), (HL_FUNC, %a5)
-
-	clr.w %d3
-	move.b (GB_SP, %a5), %d3
-	lsl.w #3, %d3
-	lea (MEM_TABLE, %a5, %d3.w), %a2
-	move.l (%a2)+, (SP_BASE, %a5)
-	move.w (%a2), (SP_FUNC, %a5)
-	rts*/
+	rts
+rtc_bank:
+	cmp.b #5, %d0
+	bhi no_bank
+	move.b %d0, (CURRENT_RAM, %a5)
+	and.w #0x00ff, %d0
+	movea.l (RTC_BLOCK, %a5), %a0 | pointer to rtc reg memory
+	lea (-96*256+2, %a6), %a1 | a1 points to proper mem_ptr
+	jsr get_ram_write
+	moveq #0, %d0
+	move.b (RAM_BLOCKS, %a5), %d0
+rtc_bank_loop:
+	move.l %a0, (%a1)+
+	move.l %d1, (%a1)
+	lea (252, %a1), %a1
+	dbf %d0, rtc_bank_loop
+	jmp rtc_refresh_values | rts will fall through to caller
 
 write_disable:
-	tst.w %d4
-	NEXT_INSTRUCTION2 end_write_disable
 end_write_disable:
 
 

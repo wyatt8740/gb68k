@@ -14,18 +14,6 @@ Bit 1 - OBJ (Sprite) Display Enable    (0=Off, 1=On)
 Bit 0 - BG Display (for CGB see below) (0=Off, 1=On)
 */
 
-
-.equ BG_WIDTH, 22
-
-/*
-gb_mem - %a3
-gb_pc - %a4
-gb_data - %a5
-gb_A %d5
-gb_F0 %d6
-gb_F1 %d7
-*/
-
 | inputs:
 |	%a2 - pointer to palette
 |	%a3 - pointer to sprite
@@ -67,13 +55,13 @@ apply_bg_palette:
 	or.b %d2, %d4 | add the next color
 	or.b %d3, %d5
 
-	move.b %d0, %d2
-	and.b %d1, %d2 | d2 = dark & light
-	move.b %d2, %d3
-	and.b (%a2)+, %d2 | d2 = palette_color & mask
-	and.b (%a2)+, %d3 | d3 = palette_color & mask
-	or.b %d2, %d4 | add the final color
-	or.b %d3, %d5
+	|move.b %d0, %d2
+	and.b %d0, %d1 | d2 = dark & light
+	move.b %d1, %d2
+	and.b (%a2)+, %d1 | d2 = palette_color & mask
+	and.b (%a2)+, %d2 | d3 = palette_color & mask
+	or.b %d1, %d4 | add the final color
+	or.b %d2, %d5
 
 	move.b %d4, (%a4)+
 	move.b %d5, (%a4)+
@@ -121,11 +109,11 @@ apply_obj_palette:
 	or.b %d2, %d4 | add the final color
 	or.b %d3, %d5
 
-	move.b %d0, %d2
-	or.b %d1, %d2
-	not.b %d2
+	|move.b %d0, %d2
+	or.b %d0, %d1
+	not.b %d1
 
-	move.b %d2, (%a6)+ | store mask
+	move.b %d1, (%a6)+ | store mask
 	move.b %d4, (%a3)+ | store light
 	move.b %d5, (%a3)+ | store dark
 	lea (-6, %a2), %a2 | go back to start of palette
@@ -258,13 +246,12 @@ apply_patch:
 	dbf %d0,0b
 	movem.l (%a7)+, %a0-%a2/%d0
 	rts
-
-
+	
 draw_screen:
 	movem.l  %d0-%d7/%a0-%a6,-(%a7)
 
-	movea.l (MEM_TABLE+1024, %a5), %a2 | a2 is video ram
-	movea.l (MEM_TABLE+2040, %a5), %a3 | a3 is IO base
+	movea.l (-128*256+2, %a6), %a2 | a2 is video ram
+	movea.l (-1*256+2, %a6), %a3 | a3 is IO base
 	move.b (LCDC, %a3), %d0
 	btst #0, %d0
 	bne 0f
@@ -299,6 +286,7 @@ patch01:
 	moveq #21-1, %d4 | draw 21 colums
 patch02:
 	moveq #14-1, %d5 | draw 14 rows | PATCH 2
+	move.l %a6, -(%a7)
 	movea.l (BG_TILEMAP, %a5), %a3
 	movea.l (BG_WINDOW_UPDATE_PAL, %a5), %a2
 	movea.l (BG_WINDOW_GFX, %a5), %a6
@@ -372,10 +360,12 @@ patch11:
 	move.w %d1, %d3
 	add.w %d2, %d3 | d3 is updated map pos
 	dbf %d4, bg_next_tile
+	
+	move.l (%a7)+, %a6
 
 	| Here, all the tiles have been drawn on the screen. Now, we need to scroll them !
 
-	movea.l (MEM_TABLE+2040, %a5), %a3 | a3 is IO base
+	movea.l (-1*256+2, %a6), %a3 | a3 is IO base
 	clr.w %d0
 	move.b (SCX, %a3), %d0
 	and.b #7, %d0 | d0 = shift
@@ -444,8 +434,8 @@ scroll_loop:
 	dbf %d7, screen_loop
 
 draw_window:
-	movea.l (MEM_TABLE+2040, %a5), %a0 | a0 is io base
-	movea.l (MEM_TABLE+1024, %a5), %a2 | a2 is video ram
+	movea.l (-1*256+2, %a6), %a0 | a0 is io base
+	movea.l (-128*256+2, %a6), %a2 | a2 is video ram
 	move.b (LCDC, %a0), %d0
 	btst #5, %d0
 	beq draw_sprites | window turned off
@@ -497,6 +487,7 @@ patch0A:
 patch0B:
 	lea (132*24, %a0), %a1 | PATCH 11
 	moveq #21-1, %d4 | draw 21 colums
+	move.l %a6, -(%a7)
 	move.w %d5, -(%a7)
 	move.w %d3, -(%a7)
 	move.l %a0, -(%a7)
@@ -566,17 +557,19 @@ window_next_tile:
 	dbf %d4, window_next_tile
 
 	lea (12, %a7), %a7 | cleanup stack
+	move.l (%a7)+, %a6
 draw_sprites:
-	movea.l (MEM_TABLE+2040, %a5), %a0
+	movea.l (-1*256+2, %a6), %a0
 	move.b (LCDC, %a0), %d0
 	btst #1, %d0
 	beq copy_buffer | sprites turned off
 	movea.l screen_buffer(%pc), %a0
 patch0C:
 	lea (132*24, %a0), %a1 | PATCH 12
+	move.l %a6, -(%a7)
 	move.l %a0, -(%a7)
 	move.l %a1, -(%a7)
-	movea.l (MEM_TABLE+2032, %a5), %a4 | a4 is oam memory
+	movea.l (-2*256+2, %a6), %a4 | a4 is oam memory
 	lea (160, %a4), %a4
 	andi.w #0x0004, %d0 | store sprite size on stack
 	move.w %d0, -(%a7)
@@ -626,7 +619,8 @@ obj_update_pal:
 	lea (%a6, %d3.w), %a6 | a6 is where to put mask
 	add.w %d3, %d3 | index *= 16
 	lea (%a3, %d3.w), %a3 | a3 is where we put palettized sprite
-	movea.l (MEM_TABLE+1024, %a5), %a4
+	movea.l (70, %a7), %a4 | BE CAREFUL OF THIS VALUE...tricky to pull it off the stack properly
+	movea.l (-128*256+2, %a4), %a4 | a4 is video ram
 	lea (%a4, %d3.w), %a4 | a4 is to-be-palettized sprite
 	jbsr apply_obj_palette | a2, is already set
 	movem.l (%a7)+, %d0-%d7/%a0-%a6
@@ -926,7 +920,7 @@ __loop_GraySprite8_OR_R_2_x_flip_y_flip:
 	dbf %d2, _loop_GraySprite8_OR_R_2_x_flip_y_flip
 	bra sprite_loop
 sprite_done:
-	lea (10 ,%a7), %a7
+	lea (14 ,%a7), %a7
 copy_buffer:
 	movea.l screen_buffer, %a0 | a0 is light
 	lea (16*24+2, %a0), %a0
