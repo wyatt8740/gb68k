@@ -50,7 +50,7 @@ Use Return Value=0
 Enable Error Return=0
 Save Screen=0
 [File Editing]
-Open File=C:\Calculator\TIGCC\Project\Gameboy\gameboy_cpu.s
+Open File=C:\Calculator\TIGCC\Project\Gameboy\GB68K.h
 [Included Files]
 C File 1=GB68K.c
 C File 2=GBSetup.c

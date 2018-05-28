@@ -433,7 +433,7 @@ char save_state(short s)
 	state.sp = gb_data->sp;
 	memcpy(state.rtc_current, gb_data->rtc_current, RTC_NUMBER);
 	memcpy(state.rtc_latched, gb_data->rtc_latched, RTC_NUMBER);
-	state.next_event = (unsigned short)((unsigned long)gb_data->next_event - (unsigned long)gb_data->mem_base);
+	state.next_event = gb_data->next_event;
 	state.event_counter = gb_data->event_counter;
 	state.cpu_halt = gb_data->cpu_halt;
 	state.ime = gb_data->ime;
@@ -538,7 +538,7 @@ char load_state(short s)
 	gb_data->sp = state->sp;
 	memcpy(gb_data->rtc_current, state->rtc_current, 5);
 	memcpy(gb_data->rtc_latched, state->rtc_latched, 5);
-	gb_data->next_event = (void *)(unsigned long)state->next_event + (unsigned long)gb_data->mem_base;
+	gb_data->next_event = state->next_event;
 	gb_data->event_counter = state->event_counter;
 	gb_data->cpu_halt = state->cpu_halt;
 	gb_data->ime = state->ime;

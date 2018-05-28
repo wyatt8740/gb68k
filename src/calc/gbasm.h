@@ -27,7 +27,7 @@
 |.equ SAVE_COUNT_EI, (SAVE_EVENT_MEM16+4)
 |.equ SAVE_COUNT_MEM16, (SAVE_EVENT_MEM16+4)
 |.equ MEM_WRITE16_BASE, (NEXT_EVENT+4)
-.equ ERROR, (NEXT_EVENT+4)
+.equ ERROR, (NEXT_EVENT+2)
 
 .equ GB_PC, (ERROR+2)
 .equ GB_SP, (GB_PC+2)
@@ -62,7 +62,8 @@
 .equ RTC_LATCH, (RTC_ENABLE+1)
 .equ RTC_CURRENT, (RTC_LATCH+1)
 .equ RTC_LATCHED, (RTC_CURRENT+5)
-.equ QUIT, (RTC_LATCHED+5)
+.equ ON_PRESSED, (RTC_LATCHED+5)
+.equ QUIT, (ON_PRESSED+1)
 .equ BREAKPOINT, (QUIT+1)
 .equ CART_TYPE, (BREAKPOINT+1)
 .equ CURRENT_ROM, (CART_TYPE+1)
@@ -158,39 +159,6 @@
 	jmp (0x7f00+6+MEM_WRITE_SIZE+IO_WRITE_SIZE+PREFIX_OPCODE_SIZE, %a6)
 .endif
 .endm
-
-|.if GB_DEBUG
-|.equ NEXT_INSTRUCTION_SIZE, 22
-|.else
-|.equ NEXT_INSTRUCTION_SIZE, 16
-|.endif
-
-/*.macro NEXT_INSTRUCTION offset
-	bmi.b 0f			| 8
-.if GB_DEBUG
-	jsr debugger_entry
-.endif
-	move.b (%a4)+, (\offset-8, %a6)	| 16
-	jmp (0x0F06.w, %a6)		| 10
-0:
-	movea.l (NEXT_EVENT, %a5), %a0
-	jmp (%a0)
-.endm					| 34
-
-| maybe add this someday for instructions that take 1 cycle
-.macro NEXT_INSTRUCTION1 offset
-	dbf %d4, 0f
-	movea.l (NEXT_EVENT, %a5), %a0
-	jmp (%a0)
-0:
-.if GB_DEBUG
-	jsr debugger_entry
-.endif
-	move.b (%a4)+, (\offset-2, %a6)	| 16
-	jmp (0x0F06.w, %a6)		| 10
-.endm*/
-	
-	
 
 .macro NEXT_INSTRUCTION2 offset
 .if GB_DEBUG

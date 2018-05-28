@@ -16,6 +16,8 @@ DLL_EXPORTS
 
 save_sram,
 load_sram,
+save_state,
+load_state,
 file_pointer,
 select_rom,
 init_rom,

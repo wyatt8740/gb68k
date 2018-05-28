@@ -1468,7 +1468,7 @@ opcode0039_end: | ADD HL, SP
 opcode00E8:
 	move.b (%a4)+, %d0
 	ext.w %d0
-	adda.l %d0, %a2
+	adda.w %d0, %a2
 opcode00E8_end: | ADD SP, nn
 opcode0003:
 	ext.w %d2

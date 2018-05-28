@@ -6,13 +6,13 @@
 
 #define GB_MAJOR 0
 #define GB_MINOR 5
-#define GB_REVISION 0
+#define GB_REVISION 1
 #define GB_ID 0x72458763 //just a random number...
 #define ROM_FILE_VERSION 0
 #define SAVE_FILE_VERSION 2
 #define STATE_FILE_VERSION 0
 #define SETTINGS_FILE_VERSION 0
-#define DLL_MAJOR 5
+#define DLL_MAJOR 6 //0.5.1
 #define DLL_MINOR 0
 
 //this will return the value of 1 sec timer on AMS 2.07 and above
@@ -69,7 +69,7 @@ typedef struct _GB_DATA {
 	unsigned long sp_base;								//index of current sp segment
 	unsigned char frame_counter;					//used for frame skipping
 	unsigned char cpu_halt;								//flag to indicate cpu is halted
-	unsigned char *next_event;						//function pointer to next cyclic event
+	unsigned short next_event;						//function pointer to next cyclic event
 	short error;													//contains reason for error
 	//the reg variables are cached here when the emulation engine is paused, and C code is running
 	unsigned short pc;										
@@ -105,6 +105,7 @@ typedef struct _GB_DATA {
 	unsigned char rtc_latch;							//used to latch rtc registers into memory
 	unsigned char rtc_current[RTC_NUMBER];//current_rtc regs
 	unsigned char rtc_latched[RTC_NUMBER];//latched rtc regs
+	unsigned char on_pressed;							//flag set when the ON key is pressed
 	unsigned char quit;										//flag set when it's time to quit
 	unsigned char breakpoint;							//flag set when we hit breakpoint
 	unsigned char cart_type;							//type of loaded cart
@@ -137,7 +138,7 @@ typedef struct _GB_DATA {
 
 register GB_DATA *gb_data asm("%a5");
 
-extern unsigned short function_base;
+extern unsigned char function_base[];
 extern unsigned short io_write_offset;
 extern unsigned short bg_gfx_write_offsets[];
 extern unsigned short write_disable_offset;

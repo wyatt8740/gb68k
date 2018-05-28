@@ -14,6 +14,8 @@
 //gb_F %d6
 //temp - %d0
 
+//TODO - make halt jump to cyclic event automatically
+
 extern GB_DATA *gb_data_store;
 
 const char title[] = {'G', 'B', '6', '8', 'K', ' ',
@@ -448,7 +450,7 @@ short create_opcode_block()
 				offset += 2;
 				//use next instructon that checks for events
 				memcpy(base + offset, next_instruction, next_instruction_size);
-				offset += next_instruction_size - 12;
+				offset += next_instruction_size - 14;
 			} else {
 				//write subq
 				*(short *)(base + offset) = (0x5144 | cycles_table[i] << 9); //subq.w #X, %d4
@@ -506,7 +508,7 @@ short create_opcode_block()
 				*(short *)(base + offset) = (0x5144 | cycles_table[i + 128] << 9); //subq.w #X, %d4
 				offset += 2;
 				memcpy(base + offset, next_instruction, next_instruction_size);
-				offset += next_instruction_size - 12;
+				offset += next_instruction_size - 14;
 			} else {
 				//write subq
 				*(short *)(base + offset) = (0x5144 | cycles_table[i + 128] << 9); //subq.w #X, %d4
@@ -557,8 +559,11 @@ char emulate()
 	
 	while(1) {
 		emulate_entry();
-		if(gb_data->error != ERROR_NONE) return FALSE;
-		else if(gb_data->quit) {
+		if(gb_data->error != ERROR_NONE) {
+			return FALSE;
+		} else if(gb_data->on_pressed) {
+			return TRUE;
+		} else if(gb_data->quit) {
 			cleanup();
 			if(opcode_block) { HeapFreePtr(opcode_block); opcode_block = NULL; }
 			if(LoadDLL("gb68klib", GB_ID, DLL_MAJOR, DLL_MINOR) != DLL_OK) { gb_data->error = ERROR_DLL; return FALSE; }
@@ -672,7 +677,7 @@ void start(void)
 		if(size_table[i] > size_table[max]) max = i;
 	}
 	clrscr();
-	printf("%02X - %d", max, size_table[max]);
+	printf("%02X - %d", max, size_table[max] + next_instruction_size);
 	ngetchx();
 
 	max = 0;
@@ -680,7 +685,7 @@ void start(void)
 		if(size_table[i] > size_table[max]) max = i;
 	}
 	clrscr();
-	printf("%02X - %d", max - 256, size_table[max]);
+	printf("%02X - %d", max - 256, size_table[max] + next_instruction1_size);
 	ngetchx();*/
 	
 	/*
@@ -739,7 +744,7 @@ void start(void)
 	memset(gb_data, 0, sizeof(GB_DATA));
 	gb_data->error = ERROR_NONE;
 	
-	gb_data->mem_base = &function_base;
+	gb_data->mem_base = function_base;
 	gb_data->vti = IsVTI();
 	gb_data->hw_version = HW_VERSION;
 	gb_data->calc_type = CALCULATOR;
@@ -792,7 +797,7 @@ void start(void)
 	gb_data->ram[0x4104] = rand() & 0xff; //DIV
 	gb_data->current_rom = 1;
 	gb_data->rtc_latch = 1;
-	gb_data->next_event = mode2_func;
+	gb_data->next_event = (unsigned long)mode2_func - (unsigned long)function_base;
 	
 	UnloadDLL();
 	
@@ -803,8 +808,10 @@ void start(void)
 	memcpy(LCD_MEM, save_screen, LCD_SIZE);
 	if(opcode_block) { HeapFreePtr(opcode_block); opcode_block = NULL; }
 	if(LoadDLL("gb68klib", GB_ID, DLL_MAJOR, DLL_MINOR) != DLL_OK) { gb_data->error = ERROR_DLL; goto quit; }
+	if(gb_data->on_pressed) {
+		if(!save_state(9)) goto quit;
+	}
 	if(!save_sram()) goto quit;
-
 quit:
 	UnloadDLL();
 	cleanup();
@@ -812,8 +819,9 @@ quit:
 	if(opcode_block) { HeapFreePtr(opcode_block); opcode_block = NULL; }
 	
 	memcpy(LCD_MEM, save_screen, LCD_SIZE);
-	if(gb_data == NULL) ST_helpMsg("ERROR - out of memory");
-	else {
+	if(gb_data == NULL) {
+		ST_helpMsg("ERROR - out of memory");
+	} else {
 		if(gb_data->error == ERROR_OUT_OF_MEM) ST_helpMsg("ERROR - out of memory");
 		else if(gb_data->error == ERROR_ILLEGAL_INSTRUCTION) ST_helpMsg("ERROR - illegal instuction");
 		else if(gb_data->error == ERROR_COMPRESS) ST_helpMsg("ERROR - compression failed");

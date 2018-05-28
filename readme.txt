@@ -1,8 +1,10 @@
-GB68K v0.5.0 by Ben Ingram
-ingramb AT gmail DOT com
+GB68K v0.5.1 by Ben Ingram
+ingramb AT gmail DOT com (questions welcome, but please at least read this file first)
 MastaZog on TIGCC boards
 Zog on most other boards (if I even post)
-Project Page at http://www.ti-news.net/project_view.php?project=gb68k
+Project Page at: http://www.ti-news.net/project_view.php?project=gb68k
+
+IF YOU DOWNLOADED THIS FROM ANYWHERE EXCEPT TI-NEWS, IT MAY NOT BE THE LATEST VERSION!  CHECK THE ABOVE LINK!
 
 DISCLAIMER
 
@@ -51,7 +53,7 @@ The optional third parameter is the flag "-pack".  This will convert the rom suc
 
 Now that you have your rom, send the emulator to your calculator, make sure you have lots of free memory, and run it.  You'll get a list of all the ROMs on the calculator.  All folders will be scanned.  Select the game you want.  If all goes well, you should be playing.  If not, the emulator will quit with an error message, or maybe crash =(
 
-Press [ESC] during emulation to open the menu.  Here you can change options, save or load the state, or quit the emulator.  With save states, you can save your progress at any point, even in games that don't normally allow saving.  The save state files are compressed, but still quite large.  The compression also takes a while.  The options are as follows:
+Press [ESC] during emulation to open the menu.  Here you can change options, save or load the state, or quit the emulator.  With save states, you can save your progress at any point, even in games that don't normally allow saving.  The save state files are compressed, but still quite large.  The compression also takes a while (in certain extreme cases, a VERY long while...if your calc seems to freeze, give it at least 5 minutes).  The options are as follows:
 
 * Frame Skip: Larger values will cause the game to run faster, but less smooth.  Higher values lead to diminishing returns.  A good value is 2 or 3.
 
@@ -65,6 +67,8 @@ Press [ESC] during emulation to open the menu.  Here you can change options, sav
 
 When you exit the emulator, settings will be stored in two files: mygamesv, and gb68ksv.  The fps and archive settings are saved in gb68k.  The other settings are game specific, and are stored for each game.  If a game has save ram, this will also be compressed and stored in mygamesv.
 
+Press [ON] during emulation to save the state in slot 9, and then exit with no prompt.  This feature is included for certain, er...situations where you may need to quickly stop playing games with little warning.
+
 The TI-89 has a resolution of 160 x 100.  The bigger calculators have 240 x 128.  The Gameboy has 160 x 144.  This means that some of the vertical screen will be chopped off.  The plus and minus keys can be used to shift the view up and down.  The multiply and divide keys will set the view to the top or bottom of the screen.
 
 Controls
@@ -74,6 +78,7 @@ All calcs
 [divide] - shift view to the top
 [multiply] - shift view to the bottom
 [ESC] - menu
+[ON] - quick save and exit
 
 TI-89
 Arrow keys
@@ -116,6 +121,9 @@ This software is open source.  You can use the source as you see fit, with a few
 
 THANKS
 * Kevin Kofler for his constant support and development of TIGCC
+* Keven Kofler again, for his work to make TiEmu compatible with gb68k
+* The rest of the TiEmu team (Thomas Corvazier, Romain Lievin, Julien Blache)
+* Rusty Wagner for Virtual TI
 * The TICT team (Lionel Debroux, Thomas Nussbaumer, and others) for hosting the TIGCC boards, and for many other contributions to the TI community
 * Everyone who answers questions on the TIGCC boards (too many to list here, but you know who you are =)
 * Samir Ribic for the TEZXAS emulator, a major source of inspiration
@@ -123,6 +131,7 @@ THANKS
 * James Ponder, for the Generator emulator and its accompanying technical report
 * Martin Korth, for the No$GMB emulator, and its debugger, which helped me locate many bugs in my own emulator
 * Francesco Orabona for his LZFO1 compression library
+* Machinae Supremacy for the soundtrack (http://www.machinaesupremacy.com/)
 * Everyone else who ever did anything for me
 A big thanks to the following people for testing and/or moral support:
 * Malcolm Smith (TRgenius)
@@ -199,4 +208,8 @@ v0.5.0 8/16/2005
 * Support for real time clock on mbc3 (used by pokemon silver, harvest moon, and others)
 * New rom format "pack", replacing "dirty" format from previous versions.  This format allows 2MB games to (barely) fit on the titanium and V200 calcs.  Default format is the same.
 * Illegal gb instructions now cause the emulator to safely quit.
+
+v0.5.1 10/5/2005
+* Fixed bug introduced in last version: adda.l -> adda.w in "ADD SP, nn" (fixes Earthworm Jim, SQRXZ, Super RC Pro-AM, and probably many others)
+* Added ON as quick save and exit key (teacher/boss/whatever key)
 

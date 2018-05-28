@@ -1143,7 +1143,7 @@ bool write_ADD16(ARG_FORMAT *src, ARG_FORMAT *dst)
 	if(dst->prefix == PREFIX_GET_SP) { //HACK!! (doesn't set flags right...)
 		fprintf(func_out, "\tmove.b (%%a4)+, %%d0\n");
 		fprintf(func_out, "\text.w %%d0\n");
-		fprintf(func_out, "\tadda.l %%d0, %%a2\n");
+		fprintf(func_out, "\tadda.w %%d0, %%a2\n");
 	} else {
 		if(src->prefix == PREFIX_GET_SP) {
 			get_SP(ARG_DT0);

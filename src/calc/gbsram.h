@@ -68,6 +68,8 @@ void *file_pointer(const char *name);
 #else
 #define save_sram _DLL_call(char, (), DLL_SAVE_SRAM)
 #define load_sram _DLL_call(char, (), DLL_LOAD_SRAM)
+#define save_state _DLL_call(char, (short), DLL_SAVE_STATE)
+#define load_state _DLL_call(char, (short), DLL_LOAD_STATE)
 #define file_pointer _DLL_call(void *, (const char *), DLL_FILE_POINTER)
 #endif
 

@@ -204,45 +204,40 @@ write16_finish:
 	NEXT_INSTRUCTION2 end_special_write16
 end_special_write16:*/
 
-| given that enable_timer flag is set, sets timer to the proper state (enabled or disabled)
+| sets timer to the proper state (enabled or disabled)
 .global reset_timer
 reset_timer:
 	tst.b (ENABLE_TIMER, %a5)
 	beq disable_timer
 	
-	movea.l #(io_write_TAC - function_base), %a0
-	move.w %a0, (io_write_table + TAC * 2)
-	
 	movea.l (-1*256+2, %a6), %a0
 	move.b (TAC, %a0), %d0
 	btst #2, %d0
-	beq reset_timer_off
+	beq disable_timer|reset_timer_off
 	and.w #0x0003, %d0
 	add.b %d0, %d0
 	add.b %d0, %d0 | d0 *= 4
-	lea timer_func_table, %a0
+	lea (timer_func_table-function_base, %a3), %a0
 	movea.l (%a0, %d0.w), %a0 | a0 points to proper timer func
-	lea timer_entry+2, %a1
+	lea (timer_entry+2-function_base, %a3), %a1
 	suba.l %a1, %a0 | now a0 is offset from timer_entry to timer func
-	move.w %a0, (timer_entry) | patch in branch offset
-	move.b #0x60, (timer_entry) | (timer_entry) = BRA
+	move.w %a0, (timer_entry-function_base, %a3) | patch in branch offset
+	move.b #0x60, (timer_entry-function_base, %a3) | (timer_entry) = BRA
 	
-	lea timer_func_table, %a0
+	lea (timer_func_table-function_base, %a3), %a0
 	movea.l (%a0, %d0.w), %a0 | a0 points to proper timer func
-	lea timer_entry_off+2, %a1
+	lea (timer_entry_off+2-function_base, %a3), %a1
 	suba.l %a1, %a0 | now a0 is offset from timer_entry_off to timer func
-	move.w %a0, (timer_entry_off+2) | patch in branch offset
-	move.w #0x6000, (timer_entry_off) | (timer_entry) = BRA
+	move.w %a0, (timer_entry_off+2-function_base, %a3) | patch in branch offset
+	move.w #0x6000, (timer_entry_off-function_base, %a3) | (timer_entry) = BRA
 	rts
-reset_timer_off:
-	move.w #0x4E71, (timer_entry) | (timer_entry) = NOP
-	move.l #0x4E714E71, (timer_entry_off) | (timer_entry_off) = NOP; NOP
-	rts
+|reset_timer_off:
+|	move.w #0x4E71, (timer_entry-function_base, %a3) | (timer_entry) = NOP
+|	move.l #0x4E714E71, (timer_entry_off-function_base, %a3) | (timer_entry_off) = NOP; NOP
+|	rts
 disable_timer:
-	move.w #0x4E71, (timer_entry) | (timer_entry) = NOP
-	move.l #0x4E714E71, (timer_entry_off) | (timer_entry_off) = NOP; NOP
-	movea.l #(io_write_default - function_base), %a0
-	move.w %a0, (io_write_table + TAC * 2)
+	move.w #0x4E71, (timer_entry-function_base, %a3) | (timer_entry) = NOP
+	move.l #0x4E714E71, (timer_entry_off-function_base, %a3) | (timer_entry_off) = NOP; NOP
 	rts
 
 io_write:
@@ -925,6 +920,7 @@ io_write_SC:
 end_io_write_SC:
 	
 io_write_IF:
+	and.b #0x0f, %d1
 	move.b %d1, (IF, %a0)
 	lea (0f, %pc), %a1
 	jmp (check_interrupts-function_base, %a3) 
@@ -932,6 +928,7 @@ io_write_IF:
 end_io_write_IF:
 
 io_write_IE:
+	and.b #0x0f, %d1
 	move.b %d1, (IE, %a0)
 	lea (0f, %pc), %a1
 	jmp (check_interrupts-function_base, %a3)
@@ -949,29 +946,31 @@ write_TAC:
 	move.b %d1, %d0
 	or.b #0xf8, %d0
 	move.b %d0, (TAC, %a0)
+	tst.b (ENABLE_TIMER, %a5)
+	beq 0f | timer turned off in options
 	btst #2, %d1
 	beq timer_off
 	and.w #0x0003, %d0
 	add.b %d0, %d0
 	add.b %d0, %d0 | d0 *= 4
-	lea timer_func_table, %a0
+	lea (timer_func_table-function_base, %a3), %a0
 	movea.l (%a0, %d0.w), %a0 | a0 points to proper timer func
-	lea timer_entry+2, %a1
+	lea (timer_entry+2-function_base, %a3), %a1
 	suba.l %a1, %a0 | now a0 is offset from timer_entry to timer func
-	move.w %a0, (timer_entry) | patch in branch offset
-	move.b #0x60, (timer_entry) | (timer_entry) = BRA
+	move.w %a0, (timer_entry-function_base, %a3) | patch in branch offset
+	move.b #0x60, (timer_entry-function_base, %a3) | (timer_entry) = BRA
 	
-	lea timer_func_table, %a0
+	lea (timer_func_table-function_base, %a3), %a0
 	movea.l (%a0, %d0.w), %a0 | a0 points to proper timer func
-	lea timer_entry_off+2, %a1
+	lea (timer_entry_off+2-function_base, %a3), %a1
 	suba.l %a1, %a0 | now a0 is offset from timer_entry_off to timer func
-	move.w %a0, (timer_entry_off+2) | patch in branch offset
-	move.w #0x6000, (timer_entry_off) | (timer_entry) = BRA
+	move.w %a0, (timer_entry_off+2-function_base, %a3) | patch in branch offset
+	move.w #0x6000, (timer_entry_off-function_base, %a3) | (timer_entry) = BRA
 	
 	bra 0f
 timer_off:
-	move.w #0x4E71, (timer_entry) | (timer_entry) = NOP
-	move.l #0x4E714E71, (timer_entry_off) | (timer_entry_off) = NOP; NOP
+	move.w #0x4E71, (timer_entry-function_base, %a3) | (timer_entry) = NOP
+	move.l #0x4E714E71, (timer_entry_off-function_base, %a3) | (timer_entry_off) = NOP; NOP
 0:
 	NEXT_INSTRUCTION2 end_write_TAC
 end_write_TAC:
@@ -1052,11 +1051,11 @@ io_write_LCDC:
 	btst #7, %d1
 	beq lcd_off
 | LCD was turned on
-	move.l #mode2_func, (NEXT_EVENT, %a5)
+	move.w #mode2_func-function_base, (NEXT_EVENT, %a5)
 	bra no_lcdc_lcd_enable
 lcd_off:
 | LCD was turned off
-	move.l #mode2_func_off, (NEXT_EVENT, %a5)
+	move.w #mode2_func_off-function_base, (NEXT_EVENT, %a5)
 no_lcdc_lcd_enable:
 	jsr (reset_LCDC-function_base, %a3)
 end_io_write_LCDC:
@@ -1191,38 +1190,37 @@ io_write_OBP1:
 	dbf %d0, 0b
 end_io_write_OBP1:
 
-.macro BG_GFX_WRITE offset, lable
+.macro BG_GFX_WRITE offset
 	move.b %d1, (%a0, %d0.w) | write to VRAM
 	lsr.b #4, %d0
 	lea (UPDATE_PAL+\offset, %a5), %a0
 	clr.b (%a0, %d0.w)
 .endm
 
-bg_gfx_write00: BG_GFX_WRITE 0, bg_gfx_write01
-bg_gfx_write01: BG_GFX_WRITE 16, bg_gfx_write02
-bg_gfx_write02: BG_GFX_WRITE 32, bg_gfx_write03
-bg_gfx_write03: BG_GFX_WRITE 48, bg_gfx_write04
-bg_gfx_write04: BG_GFX_WRITE 64, bg_gfx_write05
-bg_gfx_write05: BG_GFX_WRITE 80, bg_gfx_write06
-bg_gfx_write06: BG_GFX_WRITE 96, bg_gfx_write07
-bg_gfx_write07: BG_GFX_WRITE 112, bg_gfx_write08
-bg_gfx_write08: BG_GFX_WRITE 128, bg_gfx_write09
-bg_gfx_write09: BG_GFX_WRITE 144, bg_gfx_write0A
-bg_gfx_write0A: BG_GFX_WRITE 160, bg_gfx_write0B
-bg_gfx_write0B: BG_GFX_WRITE 176, bg_gfx_write0C
-bg_gfx_write0C: BG_GFX_WRITE 192, bg_gfx_write0D
-bg_gfx_write0D: BG_GFX_WRITE 208, bg_gfx_write0E
-bg_gfx_write0E: BG_GFX_WRITE 224, bg_gfx_write0F
-bg_gfx_write0F: BG_GFX_WRITE 240, bg_gfx_write10
-bg_gfx_write10: BG_GFX_WRITE 256, bg_gfx_write11
-bg_gfx_write11: BG_GFX_WRITE 272, bg_gfx_write12
-bg_gfx_write12: BG_GFX_WRITE 288, bg_gfx_write13
-bg_gfx_write13: BG_GFX_WRITE 304, bg_gfx_write14
-bg_gfx_write14: BG_GFX_WRITE 320, bg_gfx_write15
-bg_gfx_write15: BG_GFX_WRITE 336, bg_gfx_write16
-bg_gfx_write16: BG_GFX_WRITE 352, bg_gfx_write17
-bg_gfx_write17: BG_GFX_WRITE 368, end_bg_gfx_write
-end_bg_gfx_write:
+bg_gfx_write00: BG_GFX_WRITE 0
+bg_gfx_write01: BG_GFX_WRITE 16
+bg_gfx_write02: BG_GFX_WRITE 32
+bg_gfx_write03: BG_GFX_WRITE 48
+bg_gfx_write04: BG_GFX_WRITE 64
+bg_gfx_write05: BG_GFX_WRITE 80
+bg_gfx_write06: BG_GFX_WRITE 96
+bg_gfx_write07: BG_GFX_WRITE 112
+bg_gfx_write08: BG_GFX_WRITE 128
+bg_gfx_write09: BG_GFX_WRITE 144
+bg_gfx_write0A: BG_GFX_WRITE 160
+bg_gfx_write0B: BG_GFX_WRITE 176
+bg_gfx_write0C: BG_GFX_WRITE 192
+bg_gfx_write0D: BG_GFX_WRITE 208
+bg_gfx_write0E: BG_GFX_WRITE 224
+bg_gfx_write0F: BG_GFX_WRITE 240
+bg_gfx_write10: BG_GFX_WRITE 256
+bg_gfx_write11: BG_GFX_WRITE 272
+bg_gfx_write12: BG_GFX_WRITE 288
+bg_gfx_write13: BG_GFX_WRITE 304
+bg_gfx_write14: BG_GFX_WRITE 320
+bg_gfx_write15: BG_GFX_WRITE 336
+bg_gfx_write16: BG_GFX_WRITE 352
+bg_gfx_write17: BG_GFX_WRITE 368
 
 | bg_gfx: 8000 - 97FF
 | blocks 128 - 151

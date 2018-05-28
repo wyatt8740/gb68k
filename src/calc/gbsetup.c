@@ -11,8 +11,9 @@ volatile unsigned short counter = 0;
 volatile unsigned short frames = 0;
 volatile unsigned short current_fps = 0;
 
-extern short hw1_tick(void);
-extern short hw2_tick(void);
+extern void hw1_tick(void);
+extern void hw2_tick(void);
+extern void on_handler(void);
 
 void EnableAutoInt3()
 {
@@ -49,6 +50,7 @@ char init()
 	} else {
 		SetIntVec(AUTO_INT_1, (void *)hw1_tick);
 	}
+	SetIntVec(AUTO_INT_6, (void *)on_handler);
 
 	if(!GrayOn()) return FALSE;
 	memset(GrayGetPlane(LIGHT_PLANE), 0xff, LCD_SIZE);

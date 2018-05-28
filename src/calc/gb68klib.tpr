@@ -50,7 +50,7 @@ Use Return Value=0
 Enable Error Return=0
 Save Screen=0
 [File Editing]
-Open File=C:\Calculator\TIGCC\Project\Gameboy\GBInit.c
+Open File=C:\Calculator\TIGCC\Project\Gameboy\GBSRAM.c
 [Included Files]
 C File 1=GBLib.c
 C File 2=GBSRAM.c
