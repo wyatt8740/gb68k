@@ -39,7 +39,10 @@
 .equ GB_BC, (GB_HL+2)
 .equ GB_DE, (GB_BC+2)
 
-.equ GB_RAM, (GB_DE+2)
+.equ LIGHT_PLANE, (GB_DE+2)
+.equ DARK_PLANE, (LIGHT_PLANE+4)
+
+.equ GB_RAM, (DARK_PLANE+4)
 .equ ROM_PTR, (GB_RAM+4)
 .equ BG_TILEMAP, (ROM_PTR+43*4)
 .equ WINDOW_TILEMAP, (BG_TILEMAP+4)
@@ -58,7 +61,8 @@
 .equ OBP1_GFX, (OBP0_GFX+256*16)
 .equ MASK_GFX, (OBP1_GFX+256*16)
 .equ IME, (MASK_GFX+384*8)
-.equ RTC_ENABLE, (IME+1)
+.equ HALT_LY_CHECK, (IME+1)
+.equ RTC_ENABLE, (HALT_LY_CHECK+1)
 .equ RTC_LATCH, (RTC_ENABLE+1)
 .equ RTC_CURRENT, (RTC_LATCH+1)
 .equ RTC_LATCHED, (RTC_CURRENT+5)
@@ -76,7 +80,9 @@
 .equ Y_OFFSET, (MBC_MODE+1)
 .equ BREAK_COUNTER, (Y_OFFSET+1)
 .equ TIMER_COUNTER, (BREAK_COUNTER+1)
-.equ FRAME_SKIP, (TIMER_COUNTER+1)
+.equ TIMER_SPEED, (TIMER_COUNTER+1)
+.equ TIMER_SHIFT, (TIMER_SPEED+1)
+.equ FRAME_SKIP, (TIMER_SHIFT+1)
 .equ SHOW_FPS, (FRAME_SKIP+1)
 .equ ARCHIVE_SRAM, (SHOW_FPS+1)
 .equ ENABLE_TIMER, (ARCHIVE_SRAM+1)
@@ -128,37 +134,7 @@
 | HALT STATES
 .equ HALT_NONE, 0
 .equ HALT_PENDING, 1
-.equ HALT_ACTIVE, -1
 .equ HALT_AFTER_EI, 2
-
-/*.macro NEXT_INSTRUCTION
-	bmi cyclic_events		| 12
-	|jsr debugger_entry
-	clr.w %d1			| 4
-	move.b (%a4)+, %d1		| 8
-	add.w %d1, %d1			| 4
-	move.w (%a6, %d1.w), %d1	| 14
-	jmp (%a3, %d1.w)		| 14
-.endm*/					| 56
-
-.macro END_EVENT offset
-	tst.b (CPU_HALT, %a5)
-	bpl.b 0f
-	moveq #-1, %d4
-	bra cyclic_events
-0:
-	/*clr.w %d0
-	move.b (%a4)+, %d0
-	add.w %d0, %d0
-	move.w (%a6, %d0.w), %d0
-	jmp (%a3, %d0.w)*/
-.if GB_DEBUG
-	jmp debugger_entry
-.else
-	move.b (%a4)+, (\offset-function_base-2, %a3)
-	jmp (0x7f00+6+MEM_WRITE_SIZE+IO_WRITE_SIZE+PREFIX_OPCODE_SIZE, %a6)
-.endif
-.endm
 
 .macro NEXT_INSTRUCTION2 offset
 .if GB_DEBUG

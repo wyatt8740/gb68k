@@ -15,10 +15,14 @@
 | these locations are patched whenever stat changes
 | all are either ori.b 0x00, (...) OR ori.b 0x02, (...)
 .global stat_patch_mode2_coincidence
-.global stat_patch_mode1_coincidence
 .global stat_patch_mode0_int
 .global stat_patch_mode1_int
 .global stat_patch_mode2_int
+
+.global stat_patch_mode2_coincidence_halt
+.global stat_patch_mode0_int_halt
+.global stat_patch_mode1_int_halt
+.global stat_patch_mode2_int_halt
 
 .include "gbasm.h"
 
@@ -106,8 +110,8 @@ next_instruction:
 	move.b (%a4)+, (0x7fff, %a6)
 	jmp (0x7f00+6+MEM_WRITE_SIZE+IO_WRITE_SIZE+PREFIX_OPCODE_SIZE, %a6)
 0:
-	move.w (NEXT_EVENT, %a5), %d0
-	jmp (%a3, %d0.w)
+	move.w (NEXT_EVENT, %a5), %d1
+	jmp (%a3, %d1.w)
 .endif
 next_instruction_end:
 
@@ -123,7 +127,37 @@ next_instruction1:
 .endif
 next_instruction1_end:
 
+.macro CHECK_INTR
+	|moveq #0, %d0
+	move.b (IF, %a0), %d0
+	and.b (IE, %a0), %d0
+	and.b (IME, %a5), %d0
+	beq 0f
+	add.b %d0, %d0
+	lea (intr_table-function_base, %a3), %a1
+	move.w (%a1, %d0.w), %d1
+	jmp (%a3, %d1.w)
+0:
+.endm
+
+.macro GENERATE_INTR
+	clr.b (IME, %a5) | disable interrupts
+	move.l %a4, %d1
+	move.b (PC_BASE, %a5), (6f-function_base+2, %a3)
+6:
+	sub.l (0x7f02, %a6), %d1 | pc now relative to block
+	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
+	move.w %d1, -(%a7)
+	move.b (%a7)+, -(%a2)
+	move.b %d1, -(%a2)
+	clr.b (PC_BASE, %a5)
+	movea.l (%a6, 2), %a4
+.endm
+
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 | while LCD is off, LCD will cycle between mode 2, 3, and 0, without changing LY (hopefully this is right...)
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
 mode2_func_off:
 	movea.l (-1*256+2, %a6) ,%a0
 	move.b (STAT, %a0), %d0
@@ -136,10 +170,8 @@ mode2_func_off:
 	ori.b #(1<<1), (IF, %a0) | set flag for LCDC intr
 no_mode2_int_off:
 	move.w #mode3_func_off-function_base, (NEXT_EVENT, %a5)
-	
-	tst.b (CALC_TYPE, %a5)
-	beq process_input_89
-	bra process_input_92
+	jsr process_input_89
+	bra check_interrupts
 
 .global timer_entry_off
 
@@ -152,7 +184,7 @@ mode3_func_off:
 timer_entry_off: |will be patched with BRA (word) by io handler
 	nop
 	nop
-	END_EVENT end_mode3_func_off
+	NEXT_INSTRUCTION2 end_mode3_func_off
 end_mode3_func_off:
 
 mode0_func_off:
@@ -166,20 +198,205 @@ mode0_func_off:
 no_mode0_int_off:
 	move.b %d0, (STAT, %a0)
 	move.w #mode2_func_off-function_base, (NEXT_EVENT, %a5)
-	jra check_interrupts_event
+	jra check_interrupts
+	
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+| HALT FUNCTIONS
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+.global timer_entry_halt
 
+mode2_func_halt:
+	clr.b (LY, %a0)
+	bra 0f
+mode2_func_continue_halt:
+	addq.b #1, (LY, %a0)
+0:
+	move.b (LY, %a0), %d1
+	andi.b #~(1<<2), %d0| clear coincidence flag
+	cmp.b (LYC, %a0), %d1
+	bne mode2_no_lyc_int_halt
+	ori.b #(1<<2), %d0 | set coincidence flag
+stat_patch_mode2_coincidence_halt:
+	ori.b #(1<<1), (IF, %a0) | set flag for LCDC intr
+mode2_no_lyc_int_halt:
+	moveq #20, %d4
+	andi.b #0xfc, %d0
+	addq.b #0x02, %d0 | set mode 2
+	move.b (STAT, %a0), %d0
+	move.b %d0, (STAT, %a0)
+stat_patch_mode2_int_halt:
+	ori.b #(1<<1), (IF, %a0) | set flag for LCDC intr
+	move.w #mode3_func-function_base, (NEXT_EVENT, %a5)
+	cmp.b #67, %d1
+	bne 0f
+	jsr draw_screen
+0:
+	cmp.b (HALT_LY_CHECK, %a5), %d1
+	beq halt_break
+	CHECK_INTR
+timer_entry_halt:
+	nop
+	nop
+	| FALL THROUGH
+	
+mode0_func_halt:
+	moveq #53, %d4
+	move.b (STAT, %a0), %d0
+	andi.b #0xfc, %d0 | set mode 0
+stat_patch_mode0_int_halt:
+	ori.b #(1<<1), (IF, %a0)
+	move.b %d0, (STAT, %a0)
+	move.w #mode2_func_continue-function_base, (NEXT_EVENT, %a5)
+	CHECK_INTR
+	cmpi.b #143, (LY, %a0)
+	bcs mode2_func_continue_halt
+	| FALL THROUGH
+	
+mode1_func_halt:
+	addq.b #1, (STAT, %a0) | from mode 0 to mode 1
+stat_patch_mode1_int_halt:
+	ori.b #(1<<1), (IF, %a0) | set flag for LCDC intr
+	ori.b #(1<<0), (IF, %a0) | set int for vblank
+	moveq #114, %d4
+	addq.b #1, (DIV, %a0) | For now... (maybe should inc timer here too...if any games needs it)
+	addq.b #1, (LY, %a0)
+	move.w #mode1_func_continue-function_base, (NEXT_EVENT, %a5)
+	CHECK_INTR
+	move.b #1, (HALT_LY_CHECK, %a5)
+	bra mode2_func_halt
 
+| d1 has LY
+halt_break:
+	move.b #0x90, %d0 | d0 is value of LY to break at
+	btst #6, (STAT, %a0)
+	beq 0f
+	btst #1, (IE, %a0)
+	beq 0f
+	| coinc intr is enabled
+	cmp.b (LYC, %a0), %d1
+	bcc 0f
+	| we will hit coinc intr before next vblank
+	move.b (LYC, %a0), %d0
+0:
+	btst #2, (TAC, %a0)
+	beq 0f
+	btst #2, (IE, %a0)
+	beq 0f
+	tst.b (ENABLE_TIMER, %a5)
+	beq 0f
+	| timer is enabled
+	move.w %d0, -(%a7)
+	|moveq #0, %d0
+	move.w #0x0100, %d1
+	move.b (TIMA, %a0), %d0
+	sub.w %d0, %d1 | how many ticks till overflow?
+	| scale based on timer speed
+	lsl.w #2, %d1
+	move.b (TIMER_SHIFT, %a5), %d0
+	lsr.w %d0, %d1
+	move.b (LY, %a0), %d0
+	add.w %d0, %d1 | value of LY when timer will overflow
+	move.w (%a7)+, %d0
+	cmp.w #0x90, %d1 | don't bother doing the byte compare if d1.w is too big
+	bge 0f
+	cmp.b %d0, %d1
+	bhi 0f
+	| timer intr will occur next
+	move.b (TMA, %a0), (TIMA, %a0)
+	clr.b (TIMER_COUNTER, %a5)
+	| draw screen if we cross from LY < 67 to LY > 67
+	move.b (LY, %a0), %d0
+	cmp.b #67, %d0
+	bgt 1f
+	cmp.b #67, %d1
+	blt 1f
+	jsr draw_screen
+1:	
+	move.b %d1, (LY, %a0)
+	jmp generate_intr_50
+0:
+	cmp.b #0x90, %d0
+	beq 0f
+	| coinc intr will occur next
+	bset #2, (STAT, %a0) | set coincidence flag
+	| draw screen if we cross from LY < 67 to LY > 67
+	move.b (LY, %a0), %d1
+	cmp.b #67, %d1
+	bgt 1f
+	cmp.b #67, %d0
+	blt 1f
+	jsr draw_screen
+1:	
+	| timer stuff
+	move.w %d0, -(%a7)
+	sub.b %d1, %d0 | how many ticks are we skipping?
+	| scale based on timer speed
+	move.b (TIMER_SHIFT, %a5), %d1
+	lsl.b %d1, %d0
+	lsr.b #2, %d0
+	add.b %d0, (TIMA, %a5) | inc timer
+	move.w (%a7)+, %d0
+	| end timer stuff
+	move.b %d0, (LY, %a0)	
+	jmp generate_intr_48
+0:
+	| vblank will occur next
+	move.b (LY, %a0), %d0
+	cmp.b #67, %d0
+	bgt 1f
+	jsr draw_screen
+1:	
+	| timer stuff
+	move.w %d0, -(%a7)
+	sub.b %d1, %d0 | how many ticks are we skipping?
+	| scale based on timer speed
+	move.b (TIMER_SHIFT, %a5), %d1
+	lsl.b %d1, %d0
+	lsr.b #2, %d0
+	add.b %d0, (TIMA, %a5) | inc timer
+	move.w (%a7)+, %d0
+	| end timer stuff
+	move.b #143, (LY, %a0)
+	andi.b #0xfc, (STAT, %a0)
+	bra mode1_func_halt
+
+.global halt_function
+halt_function:
+	cmp.b #HALT_AFTER_EI, (CPU_HALT, %a5)
+	bne 0f
+	st (IME, %a5)
+0:
+	tst.b (IME, %a5)
+	beq 1f
+	clr.b (CPU_HALT, %a5)
+	movea.l (-1*256+2, %a6) ,%a0
+	move.b (LY, %a0), %d1
+	addq.b #2, %d1
+	move.b %d1, (HALT_LY_CHECK, %a5)
+	move.w (NEXT_EVENT, %a5), %d1
+	move.w (-2, %a3, %d1.w), %d1
+	jmp (%a3, %d1.w)
+1:
+	move.b #HALT_PENDING, (CPU_HALT, %a5)
+	NEXT_INSTRUCTION2 end_halt_function
+end_halt_function:
+	
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+| NORMAL FUNCTIONS
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+.word mode2_func_halt-function_base
 mode2_func:
 	movea.l (-1*256+2, %a6) ,%a0
 	clr.b (LY, %a0)
 	bra 0f
+.word mode2_func_continue_halt-function_base
 mode2_func_continue:
 	movea.l (-1*256+2, %a6) ,%a0
 	addq.b #1, (LY, %a0)
 0:
 	move.b (STAT, %a0), %d0
 	move.b (LY, %a0), %d1
-	andi #~(1<<2), %d0| clear coincidence flag
+	andi.b #~(1<<2), %d0| clear coincidence flag
 	cmp.b (LYC, %a0), %d1
 	bne mode2_no_lyc_int
 	ori.b #(1<<2), %d0 | set coincidence flag
@@ -195,24 +412,32 @@ stat_patch_mode2_int:
 	move.w #mode3_func-function_base, (NEXT_EVENT, %a5)
 	
 	cmp.b #67, %d1
-	bne check_interrupts_event
-	subq.b #1, (FRAME_COUNTER, %a5)
-	bpl check_interrupts_event
-	move.b (FRAME_SKIP, %a5), (FRAME_COUNTER, %a5)
-	jbsr draw_screen
-	tst.b (CALC_TYPE, %a5)
-	beq process_input_89
-	bra process_input_92
+	bne check_interrupts
+	jsr draw_screen
+	bra check_interrupts
 
+.global timer_func_base_jsr
+.global timer_func_halt_jsr
+.global timer_speed_table
+
+timer_func_base_jsr:
+	jmp (timer_func_base-function_base, %a3)
+timer_func_halt_jsr:
+	jmp (timer_func_halt-function_base, %a3)
+timer_speed_table:
+	.byte 1
+	.byte 64
+	.byte 16
+	.byte 4
+timer_shift_table:
+	.byte 0
+	.byte 6
+	.byte 4
+	.byte 2
+	
 .global timer_entry
-.global timer_func_table
-
-timer_func_table:
-	.long timer_func00
-	.long timer_func01
-	.long timer_func10
-	.long timer_func11
-
+	
+.word mode0_func_halt-function_base
 mode3_func:
 	addi.w #41, %d4
 	movea.l (-1*256+2, %a6) ,%a0
@@ -221,38 +446,39 @@ mode3_func:
 	addq.b #1, (DIV, %a0) | For now...
 timer_entry:
 	nop | will be replaced by jump to timer handler by io handler
+	nop
 0:
-	END_EVENT end_mode3_func
+	NEXT_INSTRUCTION2 end_mode3_func
 end_mode3_func:
 
-timer_func00:
-	subq.b #1, (TIMER_COUNTER, %a5)
-	bne 0b
-	move.b #3, (TIMER_COUNTER, %a5) | timer incs every 4 calls
+.macro TIMER_FUNC
+	move.b (TIMER_SPEED, %a5), %d0
+	move.b (TIMER_COUNTER, %a5), %d1
+	add.b %d0, %d1
+	cmp.b #4, %d1
+	blt 0f
+2:
+	subq #4, %d1
 	addq.b #1, (TIMA, %a0)
-	bcc 0b
+	bcc 1f
 	move.b (TMA, %a0), (TIMA, %a0)
 	or.b #(1<<2), (IF, %a0)
-	jra check_interrupts_event
-timer_func01:
-	add.b #16, (TIMA, %a0)
-	bcc 0b
-	move.b (TMA, %a0), (TIMA, %a0)
-	or.b #(1<<2), (IF, %a0)
-	jra check_interrupts_event
-timer_func10:
-	addq.b #4, (TIMA, %a0)
-	bcc 0b
-	move.b (TMA, %a0), (TIMA, %a0)
-	or.b #(1<<2), (IF, %a0)
-	jra check_interrupts_event
-timer_func11:
-	addq.b #1, (TIMA, %a0)
-	bcc 0b
-	move.b (TMA, %a0), (TIMA, %a0)
-	or.b #(1<<2), (IF, %a0)
-	jra check_interrupts_event
+1:
+	cmp.b #4, %d1
+	bge 2b
+0:
+	move.b %d1, (TIMER_COUNTER, %a5)
+.endm
 
+timer_func_base:
+	TIMER_FUNC
+	bra check_interrupts
+timer_func_halt:
+	TIMER_FUNC
+	CHECK_INTR
+	bra mode0_func_halt
+
+.word mode0_func_halt-function_base
 mode0_func:
 	addi.w #53, %d4
 	movea.l (-1*256+2, %a6) ,%a0
@@ -262,47 +488,36 @@ stat_patch_mode0_int:
 	ori.b #(1<<1), (IF, %a0)
 	move.b %d0, (STAT, %a0)
 	cmpi.b #143, (LY, %a0)
-	bne no_vblank
+	bcs no_vblank
 	move.w #mode1_func-function_base, (NEXT_EVENT, %a5)
-	jra check_interrupts_event
+	jra check_interrupts
 no_vblank:
 	move.w #mode2_func_continue-function_base, (NEXT_EVENT, %a5)
-	jra check_interrupts_event
+	jra check_interrupts
 
+.word mode1_func_halt-function_base
 mode1_func:
 	movea.l (-1*256+2, %a6) ,%a0
-	move.b (STAT, %a0), %d0
-	addq.b #1, %d0 | from mode 0 to mode 1
+	addq.b #1, (STAT, %a0) | from mode 0 to mode 1
 stat_patch_mode1_int:
 	ori.b #(1<<1), (IF, %a0) | set flag for LCDC intr
 	ori.b #(1<<0), (IF, %a0) | set int for vblank
 	bra 0f
+.word mode2_func_halt-function_base
 mode1_func_continue:
 	movea.l (-1*256+2, %a6) ,%a0
-	move.b (STAT, %a0), %d0
 0:
 	addi.w #114, %d4
 	addq.b #1, (DIV, %a0) | For now... (maybe should inc timer here too...if any games needs it)
-	andi.b #~(1<<2), %d0 | clear coincidence flag
 	addq.b #1, (LY, %a0)
-	move.b (LY, %a0), %d1
-	cmp.b (LYC, %a0), %d1
-	bne mode1_no_lyc_int
-	ori.b #(1<<2), %d0 | set coincidence flag
-stat_patch_mode1_coincidence:
-	ori.b #(1<<1), (IF, %a0) | set flag for LCDC intr
-mode1_no_lyc_int:
-	move.b %d0, (STAT, %a0) | rewrite value
-	cmpi.b #153, %d1
-	bne no_ly_overflow
+	cmpi.b #153, (LY, %a0)
+	bcs no_ly_overflow
 	move.w #mode2_func-function_base, (NEXT_EVENT, %a5)
-	jra check_interrupts_event
+	jra check_interrupts
 no_ly_overflow:
 	move.w #mode1_func_continue-function_base, (NEXT_EVENT, %a5)
-	jra check_interrupts_event
-
-|enable_intr_jump:
-|	jmp (enable_intr_func-function_base, %a3)	
+	jra check_interrupts
+	
 .global ei_function
 .global enable_intr_entry
 ei_function:
@@ -324,259 +539,95 @@ enable_intr_entry:
 	move.b (IF, %a0), %d0
 	and.b (IE, %a0), %d0
 	bne 0f | don't bother halting if there's an intr waiting
-	moveq #-1, %d4
-	move.b #HALT_ACTIVE, (CPU_HALT, %a5)
-	bra cyclic_events
+	move.w (NEXT_EVENT, %a5), %d1
+	move.w (-2, %a3, %d1.w), %d1
+	jmp (%a3, %d1.w)
 0:
-	lea (skip_ei, %pc), %a1
 	jmp check_interrupts
 skip_ei:
 	NEXT_INSTRUCTION2 end_ei_function
 end_ei_function:
-	
-/*	moveq #0, %d0
-	moveq #0, %d1
-	move.b (%a4), %d0
-	cmp.b #0xF3, %d0 | ignore ei followed by di
-	beq skip_ei
-	cmp.b #0xCB, %d0
-	beq prefix
-	move.b %d0, (6f - function_base + 2, %a3)
-6:
-	lea (0x7f00+6+MEM_WRITE_SIZE+IO_WRITE_SIZE+PREFIX_OPCODE_SIZE, %a6), %a0
-	bra 0f
-prefix:
-	move.b (%a4, 1), %d0
-	move.b %d0, (6f - function_base + 2, %a3)
-6:
-	lea (0x7f00+6+MEM_WRITE_SIZE+IO_WRITE_SIZE, %a6), %a0
-	add.w #256, %d0
-0:
-	lea (size_table, %pc), %a1
-	move.b (%a1, %d0.w), %d1 | size of next instruction
-	adda.l %d1, %a0 | where to put the next_instruction
-	addq.l #6, %a0
-	move.l -(%a0), -(%a7)
-	move.l %a0, -(%a7)
-	lea (enable_intr_jump, %pc), %a1
-	move.l (%a1)+, (%a0)+
-skip_ei:
-	NEXT_INSTRUCTION2 end_ei_function
-end_ei_function:
 
-.global enable_intr_entry
-.global enable_intr_func
-enable_intr_func:
-	movea.l (%a7)+, %a0
-	move.l (%a7)+, (%a0)+
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+| INTERRUPT FUNCTIONS
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-enable_intr_entry:	
-	movea.l (-1*256+2, %a6) ,%a0
-	st (IME, %a5) | enable interrupts
-	cmp.b #1, (CPU_HALT, %a5) | was a halt pending?
-	bne 0f
-	clr.b (CPU_HALT, %a5)
-	move.b (IF, %a0), %d0
-	and.b (IE, %a0), %d0
-	bne 0f | don't bother halting if there's an intr waiting
-	moveq #-1, %d4
-	move.b #-1, (CPU_HALT, %a5)
-	bra cyclic_events
-0:
-	lea (1f, %pc), %a1
-	jmp check_interrupts
-1:
-	tst.w %d4
-	bmi cyclic_events
-	END_EVENT end_enable_intr_func
-	|NEXT_INSTRUCTION2 end_enable_intr_func
-end_enable_intr_func:*/
-
-/*.global patch_next_instruction
-patch_next_instruction:
-	moveq #0, %d0
-	moveq #0, %d1
-	move.b (%a4), %d0
-	cmp.b #0xCB, %d0
-	beq prefix
-	move.b %d0, (5f-function_base-2, %a3)
-	lea (0x0F06.w, %a6), %a0
-5:
-	bra 0f
-prefix:
-	move.b (%a4, 1), %d0
-	move.b %d0, (5f-function_base-2, %a3)
-	lea (0x0F74, %a6), %a0 | THIS MUST CHANGE IF ISIZE CHANGES
-5:
-	add.w #256, %d0
-0:
-	lea size_table, %a1
-	move.b (%a1, %d0.w), %d1 | size of next instruction
-	adda.l %d1, %a0 | where to put the next_instruction
-	|lea (EI_SAVE_PTR, %a5), %a1
-	addq #6, %a0
-	move.w -(%a0), -(%a7)
-	move.l -(%a0), -(%a7)
-	move.l %a0, -(%a7)
-	
-	lea next_instruction2, %a1
-	move.l (%a1)+, (%a0)+
-	move.w (%a1), (%a0)
-	rts*/
-
-/*check_interrupts:
-	moveq #0, %d0
-	move.b (IF, %a0), %d0
-	and.b (IE, %a0), %d0
-	and.b (IME, %a5), %d0
-	move.b (%pc, intr_table, %d0), %d0
-	bne generate_int*/
-
-/*	
 intr_table:
-.byte 0x00
-.byte 0x40
-.byte 0x48
-.byte 0x40
-.byte 0x50
-.byte 0x40
-.byte 0x48
-.byte 0x40
-.byte 0x58
-.byte 0x40
-.byte 0x48
-.byte 0x40
-.byte 0x50
-.byte 0x40
-.byte 0x48
-.byte 0x40
-	
-.macro CHECK_INTR	
-	moveq #0, %d0
-	move.b (IF, %a0), %d0
-	and.b (IE, %a0), %d0
-	and.b (IME, %a5), %d0
-	beq 0f
+.word 0x00 | 0000
+.word generate_intr_40 - function_base | 0001
+.word generate_intr_48 - function_base | 0010
+.word generate_intr_40 - function_base | 0011
+.word generate_intr_50 - function_base | 0100
+.word generate_intr_40 - function_base | 0101
+.word generate_intr_48 - function_base | 0110
+.word generate_intr_40 - function_base | 0111
+.word generate_intr_58 - function_base | 1000
+.word generate_intr_40 - function_base | 1001
+.word generate_intr_48 - function_base | 1010
+.word generate_intr_40 - function_base | 1011
+.word generate_intr_50 - function_base | 1100
+.word generate_intr_40 - function_base | 1101
+.word generate_intr_48 - function_base | 1110
+.word generate_intr_40 - function_base | 1111
 
-	clr.b (IME, %a5) | disable interrupts
-	clr.b (CPU_HALT, %a5)
-	move.l %a4, %d1
-	move.b (PC_BASE, %a5), (6f-function_base+2, %a3)
-6:
-	sub.l (0x7f02, %a6), %d1 | pc now relative to block
-	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
-	clr.b (PC_BASE, %a5)
-	movea.l (%a6, 2), %a4
-	lea (intr_table-function_base, %a3), %a0 | get address of intr table
-	move.b (%a0, %d0.w), %d1
-	ext.w %d1
-	adda.w %d1, %a4 | add intr address to pc
-0:
-.endm
+generate_intr_40:
+	GENERATE_INTR
+	bclr #0, (IF, %a0)
+	lea (0x40, %a4), %a4
+	NEXT_INSTRUCTION2 end_generate_intr_40
+end_generate_intr_40:
+	
+generate_intr_48:
+	GENERATE_INTR
+	bclr #1, (IF, %a0)
+	lea (0x48, %a4), %a4
+	NEXT_INSTRUCTION2 end_generate_intr_48
+end_generate_intr_48:
+	
+
+generate_intr_50:
+	GENERATE_INTR
+	bclr #2, (IF, %a0)
+	lea (0x50, %a4), %a4
+	NEXT_INSTRUCTION2 end_generate_intr_50
+end_generate_intr_50:
+
+generate_intr_58:
+	GENERATE_INTR
+	bclr #3, (IF, %a0)
+	lea (0x58, %a4), %a4
+	NEXT_INSTRUCTION2 end_generate_intr_58
+end_generate_intr_58:
 
 check_interrupts:
 	CHECK_INTR
-	jmp (%a1)
-	
-check_interrupts_event:
-	CHECK_INTR
-	END_EVENT end_check_interrupts
-end_check_interrupts:*/
-	
-| assumes a0 is IO base
-check_interrupts:
-	move.b (IF, %a0), %d0
-	and.b (IE, %a0), %d0
-	and.b (IME, %a5), %d0
-	beq no_interrupt
-	moveq #0, %d1
-	btst %d1, %d0
-	beq no_vblank_intr
-	bchg %d1, (IF, %a0)
-	moveq #0x40, %d0
-	jmp generate_int
-no_vblank_intr:
-	moveq #1, %d1
-	btst %d1, %d0
-	beq no_stat_intr
-	bchg %d1, (IF, %a0)
-	moveq #0x48, %d0
-	jmp generate_int
-no_stat_intr:
-	moveq #2, %d1
-	btst %d1, %d0
-	beq no_timer_int
-	bchg %d1, (IF, %a0)
-	moveq #0x50, %d0
-	jmp generate_int
-no_timer_int:
-	moveq #3, %d1
-	btst %d1, %d0
-	beq no_interrupt
-	bchg %d1, (IF, %a0)
-	moveq #0x58, %d0
-	jmp generate_int
-no_interrupt:
-	jmp (%a1)
+	NEXT_INSTRUCTION2 check_interrupts_end
+check_interrupts_end:
 
-check_interrupts_event:
-	move.b (IF, %a0), %d0
-	and.b (IE, %a0), %d0
-	and.b (IME, %a5), %d0
-	beq no_interrupt2
-	moveq #0, %d1
-	btst %d1, %d0
-	beq no_vblank_intr2
-	bchg %d1, (IF, %a0)
-	moveq #0x40, %d0
-	jmp generate_int_event
-no_vblank_intr2:
-	moveq #1, %d1
-	btst %d1, %d0
-	beq no_stat_intr2
-	bchg %d1, (IF, %a0)
-	moveq #0x48, %d0
-	jmp generate_int_event
-no_stat_intr2:
-	moveq #2, %d1
-	btst %d1, %d0
-	beq no_timer_intr2
-	bchg %d1, (IF, %a0)
-	moveq #0x50, %d0
-	jmp generate_int_event
-no_timer_intr2:
-	moveq #3, %d1
-	btst %d1, %d0
-	beq no_interrupt2
-	bchg %d1, (IF, %a0)
-	moveq #0x58, %d0
-	jmp generate_int_event
-no_interrupt2:
-	END_EVENT end_check_interrupts
-end_check_interrupts:
-
+.global process_input_89
 process_input_89:
 	tst.b (ON_PRESSED, %a5)
-	bne return
-	move.w #0xffbf, 0x600018
-	moveq #24, %d0
+	beq 0f
+	addq.l #4, %a7 | kill return on stack
+	bra return
 0:
-	dbra %d0, 0b | wait
+	tst.b (CALC_TYPE, %a5)
+	bne process_input_92
+	move.w #0xffbf, 0x600018
+	moveq #24, %d1
+0:
+	dbra %d1, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
 	not.b %d0
 	beq no_quit_89
-	|lea (60, %a7), %a7 | kill 15 regs on the stack
 	st (QUIT, %a5)
-	jra return
+	addq.l #4, %a7 | kill return on stack
+	bra return
 no_quit_89:
 	move.w #0xfffd, 0x600018 | select row 1
-	move.w #24, %d0
+	moveq #24, %d1
 0:
-	dbra %d0, 0b | wait
+	dbra %d1, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
 	btst #1, %d0
 	beq inc_y_offset
@@ -585,52 +636,52 @@ no_quit_89:
 	btst #3, %d0
 	bne 0f
 	move.b #44, (Y_OFFSET, %a5)
-	jra check_interrupts_event	
+	rts	
 0:
 	btst #4, %d0
 	beq zero_y_offset
-	jra check_interrupts_event	
+	rts
 process_input_92:
-	tst.b (ON_PRESSED, %a5)
-	bne return
 	move.w #0xfeff, 0x600018
-	moveq #24, %d0
+	moveq #24, %d1
 0:
-	dbra %d0, 0b | wait
+	dbra %d1, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
 	btst #6, %d0
 	bne no_quit_92
 	|lea (60, %a7), %a7 | kill 15 regs on the stack
 	st (QUIT, %a5)
-	jra return
+	addq.l #4, %a7 | kill return on stack
+	bra return
 no_quit_92:
 	btst #4, %d0 | check +
 	beq inc_y_offset
 	move.w #0xfdff, 0x600018 | select row 1
-	move.w #24, %d0
+	moveq #24, %d1
 0:
-	dbra %d0, 0b | wait
+	dbra %d1, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
 	btst #0, %d0 | check -
 	beq dec_y_offset
 	
 	move.w #~(1<<5), 0x600018 | select row 5
-	move.w #24, %d0
+	moveq #24, %d1
 0:
-	dbra %d0, 0b | wait
+	dbra %d1, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
 	btst #0, %d0 | check /
 	beq zero_y_offset
 	
 	move.w #~(1<<7), 0x600018 | select row 7
-	move.w #24, %d0
+	moveq #24, %d1
 0:
-	dbra %d0, 0b | wait
+	dbra %d1, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
 	btst #7, %d0 | check *
-	bne check_interrupts_event
+	bne 0f
 	move.b #16, (Y_OFFSET, %a5)
-	jra check_interrupts_event
+0:
+	rts
 inc_y_offset:
 	move.b (Y_OFFSET, %a5), %d0
 	moveq #16, %d1
@@ -642,44 +693,18 @@ inc_y_offset:
 	beq 0f
 	addq.b #4, %d0
 	move.b %d0, (Y_OFFSET, %a5)
-	jra check_interrupts_event
+	rts
 dec_y_offset:
 	move.b (Y_OFFSET, %a5), %d0
 	beq 0f
 	subq.b #4, %d0
 	move.b %d0, (Y_OFFSET, %a5)
 0:
-	jra check_interrupts_event
+	rts
 zero_y_offset:
 	clr.b (Y_OFFSET, %a5)
-	jra check_interrupts_event
+	rts
 
-| halt = 0 : cpu operates as normal
-| halt = (-1) : cpu is halted
-| halt = 1 : cpu will halt once ints are enabled
-
-/*emulate_step:
-	movem.l %d2-%d3/%a2-%a3/%a6,-(%a7)
-	lea jump_table, %a6
-
-	clr.w %d0
-	move.b (%a4)+, %d0
-	add.w %d0, %d0
-	move.w (%a6, %d0.w), %d0
-	jsr (%a3, %d0.w)
-
-	tst.w %d4
-	bpl step_done
-step_cyclic_events:
-	movea.l (NEXT_EVENT, %a5), %a0
-	jsr (%a0)
-	tst.b (CPU_HALT, %a5)
-	beq step_done
-	moveq #-1, %d4
-	bra step_cyclic_events
-step_done:
-	movem.l (%a7)+, %d2-%d3/%a2-%a3/%a6
-	rts*/
 .if GB_DEBUG
 .global debugger_entry
 debugger_entry:
@@ -687,7 +712,7 @@ debugger_entry:
 	bmi cyclic_events
 	
 	movea.l (ROM_PTR, %a5), %a0
-	adda.l #0xff, %a0 |843
+	adda.l #0xc8, %a0 |843
 	
 	|movea.l (ROM_PTR+4, %a5), %a0
 	|adda.l #0xA000+0x1984, %a0 |843
@@ -828,10 +853,6 @@ tick_process:
 	move.l (%a7)+, %a5
 	rte
 
-.global cyclic_events
-cyclic_events:
-	move.w (NEXT_EVENT, %a5), %d0
-	jmp (%a3, %d0.w)
 return:
 	| put registers into memory
 	move.b %d5, (GB_A, %a5)

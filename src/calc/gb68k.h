@@ -6,13 +6,13 @@
 
 #define GB_MAJOR 0
 #define GB_MINOR 5
-#define GB_REVISION 1
+#define GB_REVISION 6
 #define GB_ID 0x72458763 //just a random number...
 #define ROM_FILE_VERSION 0
 #define SAVE_FILE_VERSION 2
 #define STATE_FILE_VERSION 0
 #define SETTINGS_FILE_VERSION 0
-#define DLL_MAJOR 6 //0.5.1
+#define DLL_MAJOR 8 //0.5.6
 #define DLL_MINOR 0
 
 //this will return the value of 1 sec timer on AMS 2.07 and above
@@ -82,6 +82,8 @@ typedef struct _GB_DATA {
 	unsigned short bc;
 	unsigned short de;
 	//misc data
+	void *light_plane;
+	void *dark_plane;
 	unsigned char *ram;										//ptr to ram
 	unsigned char *rom_ptr[43];						//ptrs to each file of rom
 	unsigned char *bg_tilemap;						//pointer set by lcdc
@@ -101,6 +103,7 @@ typedef struct _GB_DATA {
 	unsigned char obp1_gfx[256 * 16];			//tiles with obj1 palette applied
 	unsigned char mask_gfx[384 * 8];			//tile masks
 	unsigned char ime;										//interrupt enable
+	unsigned char halt_ly_check;					//break out of 0, 2, 3 loop when LY reaches this value
 	unsigned char rtc_enable;							//is an rtc register set in the ram bank?
 	unsigned char rtc_latch;							//used to latch rtc registers into memory
 	unsigned char rtc_current[RTC_NUMBER];//current_rtc regs
@@ -119,6 +122,8 @@ typedef struct _GB_DATA {
 	unsigned char y_offset;								//scroll offset
 	unsigned char break_counter;					//counts number of times breakpoint is reached
 	unsigned char timer_counter;					//to slow down timer update
+	unsigned char timer_speed;
+	unsigned char timer_shift;
 	//these are all options that can be changed from the menu
 	unsigned char frame_skip;							//how often should we draw the screen?
 	unsigned char show_fps;								//what it says

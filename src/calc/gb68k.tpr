@@ -50,14 +50,14 @@ Use Return Value=0
 Enable Error Return=0
 Save Screen=0
 [File Editing]
-Open File=C:\Calculator\TIGCC\Project\Gameboy\GB68K.h
+Open File=C:\Documents and Settings\Ben Ingram\My Documents\GB68K\src\Copy of calc\GB68K.h
 [Included Files]
 C File 1=GB68K.c
 C File 2=GBSetup.c
 GNU Assembler File 1=gameboy_video.s
 GNU Assembler File 2=gameboy_mem.s
 GNU Assembler File 3=gameboy_cpu.s
-GNU Assembler File 4=C:\Calculator\Gameboy\OpcodeGenerator\gameboy_opcodes.s
+GNU Assembler File 4=gameboy_opcodes.S
 Header File 1=GB68K.h
 Header File 2=GBSetup.h
 Header File 3=GBASM.h

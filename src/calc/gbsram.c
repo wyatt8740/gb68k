@@ -541,6 +541,7 @@ char load_state(short s)
 	gb_data->next_event = state->next_event;
 	gb_data->event_counter = state->event_counter;
 	gb_data->cpu_halt = state->cpu_halt;
+	if(gb_data->cpu_halt == 0xff) gb_data->cpu_halt = 0; //maybe needed for back compat?
 	gb_data->ime = state->ime;
 	gb_data->current_rom = state->current_rom;
 	gb_data->current_ram = state->current_ram;

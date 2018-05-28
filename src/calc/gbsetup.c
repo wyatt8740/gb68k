@@ -2,6 +2,7 @@
 // Created 7/30/2004; 1:28:56 AM
 
 #include <tigcclib.h>
+#include <grib.h>
 #include "gb68k.h"
 #include "gbsetup.h"
 
@@ -53,8 +54,9 @@ char init()
 	SetIntVec(AUTO_INT_6, (void *)on_handler);
 
 	if(!GrayOn()) return FALSE;
-	memset(GrayGetPlane(LIGHT_PLANE), 0xff, LCD_SIZE);
-	memset(GrayGetPlane(DARK_PLANE), 0xff, LCD_SIZE);
+	//GribOn(gb_data->light_plane, gb_data->dark_plane);
+	gb_data->light_plane = GrayGetPlane(LIGHT_PLANE);
+	gb_data->dark_plane = GrayGetPlane(DARK_PLANE);
 	
 	if(gb_data->calc_type == 0) io_write_table[0] = P1_89;
 	else io_write_table[0] = P1_92;
@@ -66,6 +68,8 @@ void cleanup()
 {
 	short i;
 	
+	memcpy(LCD_MEM, gb_data->light_plane, LCD_SIZE);
+	//GribOff();
 	GrayOff();
 	
 	if(gb_data->ints_redirected) {
@@ -76,7 +80,6 @@ void cleanup()
 	}
 
 	if(!gb_data->int3_enabled) DisableAutoInt3();
-	PortRestore();
 }
 
 void pause()

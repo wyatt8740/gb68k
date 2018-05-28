@@ -2,6 +2,7 @@
 // Created 7/22/2004; 4:43:10 PM
 
 #include <tigcclib.h>
+#include <grib.h>
 #include "gb68k.h"
 #include "gbsetup.h"
 #include "gbsram.h"
@@ -668,6 +669,7 @@ __VTI:
 void start(void)
 {
 	char save_screen[LCD_SIZE];
+	//char gray_planes[GRIB_GRAY_BUFFER_SIZE];
 	char rom_name[9];
 	short i;
 
@@ -757,6 +759,7 @@ void start(void)
 
 	gb_data->rom_name = rom_name;
 	if(!load_sram()) goto quit;
+	UnloadDLL();
 
 	//memcpy(opcode_block + 0x8000 + 80, cyclic_events, 80);
 
@@ -771,6 +774,9 @@ void start(void)
 	printf("%lX", jump_table[0xff]);
 	ngetchx();*/
 	randomize();
+	
+	//GribMakePlanes(gray_planes, &gb_data->light_plane, &gb_data->dark_plane);
+	//memset(gray_planes, 0x00, GRIB_GRAY_BUFFER_SIZE);
 	if(!init()) { gb_data->error = ERROR_OUT_OF_MEM; goto quit; }
 	
 	if(gb_data->calc_type == 0) {
@@ -799,10 +805,7 @@ void start(void)
 	gb_data->rtc_latch = 1;
 	gb_data->next_event = (unsigned long)mode2_func - (unsigned long)function_base;
 	
-	UnloadDLL();
-	
 	//if(!create_opcode_block()) goto quit;
-	
 	if(!emulate()) goto quit;
 	GrayOff();
 	memcpy(LCD_MEM, save_screen, LCD_SIZE);
@@ -839,9 +842,20 @@ quit:
 	}
 }
 
+asm("
+.global __main
+__main:
+	movem.l %d0-%d7/%a0-%a6, -(%sp)
+	jsr start
+	movem.l (%sp)+, %d0-%d7/%a0-%a6
+	rts
+");
+		
+		
+/*
 void _main()
 {
 	asm("movem.l %d0-%d7/%a0-%a6, -(%sp)");
 	start();
 	asm("movem.l (%sp)+, %d0-%d7/%a0-%a6");
-}
+}*/

@@ -1,4 +1,4 @@
-GB68K v0.5.1 by Ben Ingram
+GB68K v0.5.6 by Ben Ingram
 ingramb AT gmail DOT com (questions welcome, but please at least read this file first)
 MastaZog on TIGCC boards
 Zog on most other boards (if I even post)
@@ -124,6 +124,7 @@ THANKS
 * Keven Kofler again, for his work to make TiEmu compatible with gb68k
 * The rest of the TiEmu team (Thomas Corvazier, Romain Lievin, Julien Blache)
 * Rusty Wagner for Virtual TI
+* Julien Richard-Foy for grib
 * The TICT team (Lionel Debroux, Thomas Nussbaumer, and others) for hosting the TIGCC boards, and for many other contributions to the TI community
 * Everyone who answers questions on the TIGCC boards (too many to list here, but you know who you are =)
 * Samir Ribic for the TEZXAS emulator, a major source of inspiration
@@ -212,4 +213,18 @@ v0.5.0 8/16/2005
 v0.5.1 10/5/2005
 * Fixed bug introduced in last version: adda.l -> adda.w in "ADD SP, nn" (fixes Earthworm Jim, SQRXZ, Super RC Pro-AM, and probably many others)
 * Added ON as quick save and exit key (teacher/boss/whatever key)
+
+v0.5.5 11/8/2005
+* Switched from TIGCC grayscale to grib, which saves a bit of memory
+* Gray planes are allocated on the stack, which saves a lot of ram (made possible by grib)
+* Lots of optimizations in event processing code and handling of halt instruction.  So games that use the halt instruction a lot (games that already run fast) get a huge speed increase, and other games get a smaller speed increase.  Some games are actually running faster than the real thing now!!  But some games still run very slow.
+* Optimized pushihg gameboy PC to stack to use dirty trick invloving m68k SP (thanks you phoinix)
+* Reworked code so that upper 3 bytes of d0 are always kept as 0.  This saves lots of "moveq #0, %d0" instructions that used to precede byte sized moves into d0, where d0 is later used as a word sized index.
+
+v0.5.6 12/7/2005
+* Fixed nasty bug with link cable code.  I'd be surprised if any game that used the link cable worked with the last version =(
+* Fixed a stupid bug with the timer
+* Switched back to TIGCC grayscale.  I like grib, but it has issues with certain games on certain calcs.
+
+
 

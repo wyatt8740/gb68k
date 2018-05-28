@@ -19,11 +19,10 @@ Bit 0 - BG Display (for CGB see below) (0=Off, 1=On)
 |	%a3 - pointer to sprite
 |	%a4 - where to put the sprite
 | modifies:
-|	d0, d1, d2, d3, d4, d5, a6, d7 destroyed
+|	d0, d1, d2, d3, d4, d5, d7 destroyed
 |	a2 preserved, a3 += 16, a4 += 16
 apply_bg_palette:
 	moveq #7, %d7 | d7 is counter
-	movea.l %a2, %a6
 0:
 	move.b (%a3)+, %d0 | get sprite into d0
 	move.b (%a3)+, %d1 | get sprite into d1
@@ -65,14 +64,14 @@ apply_bg_palette:
 
 	move.b %d4, (%a4)+
 	move.b %d5, (%a4)+
-	movea.l %a6, %a2 | go back to start of palette
+	lea (-8, %a2), %a2 | go back to start of pal
 	dbf %d7, 0b
 	rts
 
 | inputs:
 |	%a2 - pointer to palette
-|	%a3 - where to put the sprite
-|	%a4 - pointer to sprite
+|	%a3 - pointer to sprite
+|	%a4 - where to put the sprite
 |	%a6 - where to put the mask
 |	%d7 - hieght of sprite
 | modifies:
@@ -80,8 +79,8 @@ apply_bg_palette:
 |	a2 preserved, a3 += 16, a4 += 16, a6 += 8
 apply_obj_palette:
 0:
-	move.b (%a4)+, %d0 | get sprite into d0
-	move.b (%a4)+, %d1 | get sprite into d1
+	move.b (%a3)+, %d0 | get sprite into d0
+	move.b (%a3)+, %d1 | get sprite into d1
 
 	move.b %d1, %d2
 	not.b %d2
@@ -114,8 +113,8 @@ apply_obj_palette:
 	not.b %d1
 
 	move.b %d1, (%a6)+ | store mask
-	move.b %d4, (%a3)+ | store light
-	move.b %d5, (%a3)+ | store dark
+	move.b %d4, (%a4)+ | store light
+	move.b %d5, (%a4)+ | store dark
 	lea (-6, %a2), %a2 | go back to start of palette
 	dbf %d7, 0b
 	rts
@@ -155,9 +154,9 @@ clear_buffer:
 	moveq #0x0, %d3
 	moveq #0x0, %d4
 0:
-	lea (-4, %a0), %a0
+	subq.l #4, %a0
 	movem.l %d0-%d4, -(%a0)
-	lea (-4, %a1), %a1
+	subq.l #4, %a1
 	movem.l %d0-%d4, -(%a1)
 
 	dbf %d5, 0b
@@ -248,6 +247,10 @@ apply_patch:
 	rts
 	
 draw_screen:
+	subq.b #1, (FRAME_COUNTER, %a5)
+	bpl process_input_89
+	move.b (FRAME_SKIP, %a5), (FRAME_COUNTER, %a5)
+	
 	movem.l  %d0-%d7/%a0-%a6,-(%a7)
 
 	movea.l (-128*256+2, %a6), %a2 | a2 is video ram
@@ -311,11 +314,10 @@ bg_next_tile:
 |	.word 0x3000
 |	.word 0x4886 | 0100 100 010 000 110 - ext.w %d6
 
-	btst.b #0, (%a2, %d6.w)
+	bset.b #0, (%a2, %d6.w) | tst, then set
 	bne no_update_palette
 | apply palette to current tile
 	movem.l %d0-%d7/%a2-%a3/%a6, -(%a7)
-	bset.b #0, (%a2, %d6.w) | set flag to indicate palette is up to date
 	lea (BG_PALETTE, %a5), %a2 | a2 is palette to apply
 	lsl.w #4, %d6 | d6 *= 16
 	lea (%a6, %d6.w), %a4 | a4 points to to-be-palettized tile
@@ -506,11 +508,10 @@ window_next_tile:
 	.word 0x1C33 | 0001 000 110 110 011 - move.b (%a3, %d3.w), %d6
 	.word 0x3000 | 0 011 0 000 00000000 - ext word for move
 
-	btst.b #0, (%a2, %d6.w)
+	bset.b #0, (%a2, %d6.w)
 	bne 0f
 | apply palette to current tile
 	movem.l %d0-%d7/%a2-%a3/%a6, -(%a7)
-	bset.b #0, (%a2, %d6.w) | set flag to indicate palette is up to date
 	lea (BG_PALETTE, %a5), %a2 | a2 is palette to apply
 	lsl.w #4, %d6 | d6 *= 16
 	lea (%a6, %d6.w), %a4 | a4 points to to-be-palettized tile
@@ -618,10 +619,10 @@ obj_update_pal:
 	lea (MASK_GFX, %a5), %a6
 	lea (%a6, %d3.w), %a6 | a6 is where to put mask
 	add.w %d3, %d3 | index *= 16
-	lea (%a3, %d3.w), %a3 | a3 is where we put palettized sprite
-	movea.l (70, %a7), %a4 | BE CAREFUL OF THIS VALUE...tricky to pull it off the stack properly
-	movea.l (-128*256+2, %a4), %a4 | a4 is video ram
-	lea (%a4, %d3.w), %a4 | a4 is to-be-palettized sprite
+	lea (%a3, %d3.w), %a4 | a4 is where we put palettized sprite
+	movea.l (70, %a7), %a3 | BE CAREFUL OF THIS VALUE...tricky to pull it off the stack properly
+	movea.l (-128*256+2, %a3), %a3 | a3 is video ram
+	lea (%a3, %d3.w), %a3 | a3 is to-be-palettized sprite
 	jbsr apply_obj_palette | a2, is already set
 	movem.l (%a7)+, %d0-%d7/%a0-%a6
 no_obj_update_pal:
@@ -645,7 +646,7 @@ no_obj_update_pal:
 	move.w %d0, %d3 | d3 = x
 	lsr.w #4, %d3 | d3 = x/16
 	add.w %d3,%d3
-
+	
 	add.w %d3, %d1 | d1 = 24*y + x/8
 	adda.w %d1, %a0 | a0 += offset
 	adda.w %d1, %a1
@@ -655,18 +656,83 @@ no_obj_update_pal:
 
 | Here we diverge into the appropriate flipped version
 	andi.b #0x60, %d4
+	beq sprite_no_flip
 	lsr.b #5, %d4 | lower 2 bits of d4 are now Y-flip/X-flip
-	moveq #3, %d5
-	cmp.b %d5, %d4
-	beq sprite_x_flip_y_flip
-	subq.b #1, %d5
-	cmp.b %d5, %d4
-	beq sprite_y_flip
-	subq.b #1, %d5
-	cmp.b %d5, %d4
+	subq.b #1, %d4
 	beq sprite_x_flip
+	subq.b #1, %d4
+	beq sprite_y_flip
+	
+sprite_x_flip_y_flip:
+	lea (2, %a2, %d2.l), %a2
+	adda.l %d2, %a2
+	lea (1, %a6, %d2.l), %a6
+	sub.w %d0, %d1
+	bge.s __loop_GraySprite8_OR_R_2_x_flip_y_flip
 
-| 8 x 8 sprite, no flipping
+	neg.w %d1
+_loop_GraySprite8_OR_R_1_x_flip_y_flip:
+	moveq #-1, %d0
+	moveq #0, %d3
+	move.b -(%a6), %d3
+	move.b (%a3, %d3.w), %d0
+	swap %d0
+	ror.l %d1, %d0
+	move.l %d0, %d3
+	and.l (%a1), %d0
+	and.l (%a0), %d3
+
+	moveq #0, %d4
+	move.b -(%a2), %d4
+	move.b (%a3, %d4.w), %d4
+	swap.w %d4
+	lsr.l %d1, %d4
+	or.l %d4, %d0
+	move.l %d0, (%a1)
+	lea.l (24, %a1),%a1
+
+	moveq #0, %d0
+	move.b -(%a2), %d0
+	move.b (%a3, %d0.w), %d0
+	swap.w %d0
+	lsr.l %d1, %d0
+	or.l %d0, %d3
+	move.l %d3, (%a0)
+	lea.l (24, %a0),%a0
+
+	dbf %d2, _loop_GraySprite8_OR_R_1_x_flip_y_flip
+	bra sprite_loop
+_loop_GraySprite8_OR_R_2_x_flip_y_flip:
+	lea (24, %a0), %a0
+	lea (24, %a1), %a1
+__loop_GraySprite8_OR_R_2_x_flip_y_flip:
+	moveq #-1, %d0
+	moveq #0, %d3
+	move.b -(%a6), %d3
+	move.b (%a3, %d3.w), %d0
+	rol.w %d1, %d0
+	move.w %d0, %d3
+	and.w (%a1), %d0
+	and.w (%a0), %d3
+
+	moveq #0, %d4
+	move.b -(%a2), %d4
+	move.b (%a3, %d4.w), %d4
+	lsl.w %d1, %d4
+	or.w %d4, %d0
+	move.w %d0, (%a1)
+
+	moveq #0, %d0
+	move.b -(%a2), %d0
+	move.b (%a3, %d0.w), %d0
+	lsl.w %d1, %d0
+	or.w %d0, %d3
+	move.w %d3, (%a0)
+
+	dbf %d2, _loop_GraySprite8_OR_R_2_x_flip_y_flip
+	bra sprite_loop
+
+sprite_no_flip:
 	sub.w %d0, %d1
 	bge.s __loop_GraySprite8_OR_R_2
 
@@ -851,74 +917,6 @@ __loop_GraySprite8_OR_R_2_y_flip:
 	dbf %d2, _loop_GraySprite8_OR_R_2_y_flip
 	bra sprite_loop
 
-sprite_x_flip_y_flip:
-	lea (2, %a2, %d2.l), %a2
-	adda.l %d2, %a2
-	lea (1, %a6, %d2.l), %a6
-	sub.w %d0, %d1
-	bge.s __loop_GraySprite8_OR_R_2_x_flip_y_flip
-
-	neg.w %d1
-_loop_GraySprite8_OR_R_1_x_flip_y_flip:
-	moveq #-1, %d0
-	moveq #0, %d3
-	move.b -(%a6), %d3
-	move.b (%a3, %d3.w), %d0
-	swap %d0
-	ror.l %d1, %d0
-	move.l %d0, %d3
-	and.l (%a1), %d0
-	and.l (%a0), %d3
-
-	moveq #0, %d4
-	move.b -(%a2), %d4
-	move.b (%a3, %d4.w), %d4
-	swap.w %d4
-	lsr.l %d1, %d4
-	or.l %d4, %d0
-	move.l %d0, (%a1)
-	lea.l (24, %a1),%a1
-
-	moveq #0, %d0
-	move.b -(%a2), %d0
-	move.b (%a3, %d0.w), %d0
-	swap.w %d0
-	lsr.l %d1, %d0
-	or.l %d0, %d3
-	move.l %d3, (%a0)
-	lea.l (24, %a0),%a0
-
-	dbf %d2, _loop_GraySprite8_OR_R_1_x_flip_y_flip
-	bra sprite_loop
-_loop_GraySprite8_OR_R_2_x_flip_y_flip:
-	lea (24, %a0), %a0
-	lea (24, %a1), %a1
-__loop_GraySprite8_OR_R_2_x_flip_y_flip:
-	moveq #-1, %d0
-	moveq #0, %d3
-	move.b -(%a6), %d3
-	move.b (%a3, %d3.w), %d0
-	rol.w %d1, %d0
-	move.w %d0, %d3
-	and.w (%a1), %d0
-	and.w (%a0), %d3
-
-	moveq #0, %d4
-	move.b -(%a2), %d4
-	move.b (%a3, %d4.w), %d4
-	lsl.w %d1, %d4
-	or.w %d4, %d0
-	move.w %d0, (%a1)
-
-	moveq #0, %d0
-	move.b -(%a2), %d0
-	move.b (%a3, %d0.w), %d0
-	lsl.w %d1, %d0
-	or.w %d0, %d3
-	move.w %d3, (%a0)
-
-	dbf %d2, _loop_GraySprite8_OR_R_2_x_flip_y_flip
-	bra sprite_loop
 sprite_done:
 	lea (14 ,%a7), %a7
 copy_buffer:
@@ -961,8 +959,8 @@ draw_fps_loop:
 	lea (-24*5, %a0), %a0 | put back light
 	lea (-24*5, %a1), %a1 | put back dark
 no_fps:
-	movea.l __L_plane, %a2
-	movea.l __D_plane, %a3
+	movea.l (LIGHT_PLANE, %a5), %a2
+	movea.l (DARK_PLANE, %a5), %a3
 patch0F:
 	moveq #99, %d7 | PATCH 15
 0:
@@ -978,7 +976,7 @@ patch0F:
 	
 	addq.w #1, frames
 	movem.l  (%a7)+, %d0-%d7/%a0-%a6
-	rts
+	bra process_input_89
 
 | borrowed from TIGB
 x_flip_table:

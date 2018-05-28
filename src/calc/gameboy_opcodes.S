@@ -15,14 +15,14 @@ opcode_start:
 opcode0040:
 opcode0040_end: | LD B, B
 opcode0048:
-	move.l %d2, %d0
-	swap %d0
-	move.b %d0, %d2
+	move.l %d2, %d1
+	swap %d1
+	move.b %d1, %d2
 opcode0048_end: | LD C, B
 opcode0050:
-	move.l %d2, %d0
-	move.b %d3, %d0
-	move.l %d0, %d3
+	move.l %d2, %d1
+	move.b %d3, %d1
+	move.l %d1, %d3
 opcode0050_end: | LD D, B
 opcode0058:
 	swap %d2
@@ -30,9 +30,9 @@ opcode0058:
 	swap %d2
 opcode0058_end: | LD E, B
 opcode0060:
-	move.l %d2, %d0
-	move.b %d7, %d0
-	move.l %d0, %d7
+	move.l %d2, %d1
+	move.b %d7, %d1
+	move.l %d1, %d7
 opcode0060_end: | LD H, B
 opcode0068:
 	swap %d2
@@ -40,7 +40,6 @@ opcode0068:
 	swap %d2
 opcode0068_end: | LD L, B
 opcode0070:
-	moveq #0, %d0
 	move.b %d7, %d0
 	move.l %d2, %d1
 	swap %d1
@@ -56,9 +55,9 @@ opcode0078:
 	swap %d2
 opcode0078_end: | LD A, B
 opcode0041:
-	move.b %d2, %d0
+	move.b %d2, %d1
 	swap %d2
-	move.b %d0, %d2
+	move.b %d1, %d2
 opcode0041_end: | LD B, C
 opcode0049:
 opcode0049_end: | LD C, C
@@ -79,7 +78,6 @@ opcode0069:
 	move.b %d2, %d7
 opcode0069_end: | LD L, C
 opcode0071:
-	moveq #0, %d0
 	move.b %d7, %d0
 	move.b %d2, %d1
 	swap %d7
@@ -92,9 +90,9 @@ opcode0079:
 	move.b %d2, %d5
 opcode0079_end: | LD A, C
 opcode0042:
-	move.l %d3, %d0
-	move.b %d2, %d0
-	move.l %d0, %d2
+	move.l %d3, %d1
+	move.b %d2, %d1
+	move.l %d1, %d2
 opcode0042_end: | LD B, D
 opcode004A:
 	swap %d3
@@ -104,14 +102,14 @@ opcode004A_end: | LD C, D
 opcode0052:
 opcode0052_end: | LD D, D
 opcode005A:
-	move.l %d3, %d0
-	swap %d0
-	move.b %d0, %d3
+	move.l %d3, %d1
+	swap %d1
+	move.b %d1, %d3
 opcode005A_end: | LD E, D
 opcode0062:
-	move.l %d3, %d0
-	move.b %d7, %d0
-	move.l %d0, %d7
+	move.l %d3, %d1
+	move.b %d7, %d1
+	move.l %d1, %d7
 opcode0062_end: | LD H, D
 opcode006A:
 	swap %d3
@@ -119,7 +117,6 @@ opcode006A:
 	swap %d3
 opcode006A_end: | LD L, D
 opcode0072:
-	moveq #0, %d0
 	move.b %d7, %d0
 	move.l %d3, %d1
 	swap %d1
@@ -143,9 +140,9 @@ opcode004B:
 	move.b %d3, %d2
 opcode004B_end: | LD C, E
 opcode0053:
-	move.b %d3, %d0
+	move.b %d3, %d1
 	swap %d3
-	move.b %d0, %d3
+	move.b %d1, %d3
 opcode0053_end: | LD D, E
 opcode005B:
 opcode005B_end: | LD E, E
@@ -158,7 +155,6 @@ opcode006B:
 	move.b %d3, %d7
 opcode006B_end: | LD L, E
 opcode0073:
-	moveq #0, %d0
 	move.b %d7, %d0
 	move.b %d3, %d1
 	swap %d7
@@ -171,9 +167,9 @@ opcode007B:
 	move.b %d3, %d5
 opcode007B_end: | LD A, E
 opcode0044:
-	move.l %d7, %d0
-	move.b %d2, %d0
-	move.l %d0, %d2
+	move.l %d7, %d1
+	move.b %d2, %d1
+	move.l %d1, %d2
 opcode0044_end: | LD B, H
 opcode004C:
 	swap %d7
@@ -181,9 +177,9 @@ opcode004C:
 	swap %d7
 opcode004C_end: | LD C, H
 opcode0054:
-	move.l %d7, %d0
-	move.b %d3, %d0
-	move.l %d0, %d3
+	move.l %d7, %d1
+	move.b %d3, %d1
+	move.l %d1, %d3
 opcode0054_end: | LD D, H
 opcode005C:
 	swap %d7
@@ -193,12 +189,11 @@ opcode005C_end: | LD E, H
 opcode0064:
 opcode0064_end: | LD H, H
 opcode006C:
-	move.l %d7, %d0
-	swap %d0
-	move.b %d0, %d7
+	move.l %d7, %d1
+	swap %d1
+	move.b %d1, %d7
 opcode006C_end: | LD L, H
 opcode0074:
-	moveq #0, %d0
 	move.b %d7, %d0
 	move.l %d7, %d1
 	swap %d1
@@ -230,14 +225,13 @@ opcode005D:
 	move.b %d7, %d3
 opcode005D_end: | LD E, L
 opcode0065:
-	move.b %d7, %d0
+	move.b %d7, %d1
 	swap %d7
-	move.b %d0, %d7
+	move.b %d1, %d7
 opcode0065_end: | LD H, L
 opcode006D:
 opcode006D_end: | LD L, L
 opcode0075:
-	moveq #0, %d0
 	move.b %d7, %d0
 	move.b %d7, %d1
 	swap %d7
@@ -250,7 +244,6 @@ opcode007D:
 	move.b %d7, %d5
 opcode007D_end: | LD A, L
 opcode0046:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode0046 + 2 + (18108), %a6)
@@ -262,7 +255,6 @@ opcode0046:
 	swap %d2
 opcode0046_end: | LD B, (HL)
 opcode004E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode004E + 2 + (20156), %a6)
@@ -272,7 +264,6 @@ opcode004E:
 	move.b (%a0, %d0.w), %d2
 opcode004E_end: | LD C, (HL)
 opcode0056:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode0056 + 2 + (22204), %a6)
@@ -284,7 +275,6 @@ opcode0056:
 	swap %d3
 opcode0056_end: | LD D, (HL)
 opcode005E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode005E + 2 + (24252), %a6)
@@ -294,7 +284,6 @@ opcode005E:
 	move.b (%a0, %d0.w), %d3
 opcode005E_end: | LD E, (HL)
 opcode0066:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode0066 + 2 + (26300), %a6)
@@ -306,7 +295,6 @@ opcode0066:
 	swap %d7
 opcode0066_end: | LD H, (HL)
 opcode006E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode006E + 2 + (28348), %a6)
@@ -316,7 +304,6 @@ opcode006E:
 	move.b (%a0, %d0.w), %d7
 opcode006E_end: | LD L, (HL)
 opcode007E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode007E + 2 + (32444), %a6)
@@ -350,7 +337,6 @@ opcode006F:
 	move.b %d5, %d7
 opcode006F_end: | LD L, A
 opcode0077:
-	moveq #0, %d0
 	move.b %d7, %d0
 	move.b %d5, %d1
 	swap %d7
@@ -386,7 +372,6 @@ opcode002E:
 	move.b (%a4)+, %d7
 opcode002E_end: | LD L, nn
 opcode0036:
-	moveq #0, %d0
 	move.b %d7, %d0
 	move.b (%a4)+, %d1
 	swap %d7
@@ -399,7 +384,6 @@ opcode003E:
 	move.b (%a4)+, %d5
 opcode003E_end: | LD A, nn
 opcode000A:
-	moveq #0, %d0
 	move.b %d2, %d0
 	swap %d2
 	move.b %d2, (6f - opcode000A + 2 + (2748), %a6)
@@ -409,7 +393,6 @@ opcode000A:
 	move.b (%a0, %d0.w), %d5
 opcode000A_end: | LD A, (BC)
 opcode001A:
-	moveq #0, %d0
 	move.b %d3, %d0
 	swap %d3
 	move.b %d3, (6f - opcode001A + 2 + (6844), %a6)
@@ -419,7 +402,6 @@ opcode001A:
 	move.b (%a0, %d0.w), %d5
 opcode001A_end: | LD A, (DE)
 opcode0002:
-	moveq #0, %d0
 	move.b %d2, %d0
 	move.b %d5, %d1
 	swap %d2
@@ -429,7 +411,6 @@ opcode0002:
 	jmp (0x7f00, %a6)
 opcode0002_end: | LD (BC), A
 opcode0012:
-	moveq #0, %d0
 	move.b %d3, %d0
 	move.b %d5, %d1
 	swap %d3
@@ -439,7 +420,6 @@ opcode0012:
 	jmp (0x7f00, %a6)
 opcode0012_end: | LD (DE), A
 opcode0022:
-	moveq #0, %d0
 	move.b %d7, %d0
 	move.b %d5, %d1
 	swap %d7
@@ -451,7 +431,6 @@ opcode0022:
 	jmp (0x7f00, %a6)
 opcode0022_end: | LD (HL)+, A
 opcode002A:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode002A + 2 + (10940), %a6)
@@ -463,7 +442,6 @@ opcode002A:
 	move.b (%a0, %d0.w), %d5
 opcode002A_end: | LD A, (HL)+
 opcode0032:
-	moveq #0, %d0
 	move.b %d7, %d0
 	move.b %d5, %d1
 	swap %d7
@@ -475,7 +453,6 @@ opcode0032:
 	jmp (0x7f00, %a6)
 opcode0032_end: | LD (HL)-, A
 opcode003A:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode003A + 2 + (15036), %a6)
@@ -487,7 +464,6 @@ opcode003A:
 	move.b (%a0, %d0.w), %d5
 opcode003A_end: | LD A, (HL)-
 opcode00E0:
-	moveq #0, %d0
 	move.b (%a4)+, %d0
 	movea.l (-1*256+2, %a6), %a0
 	move.b %d5, %d1
@@ -496,7 +472,6 @@ opcode00E0:
 	jmp (0x7f42, %a6)
 opcode00E0_end: | LD (FF00+nn), A
 opcode00E2:
-	moveq #0, %d0
 	move.b %d2, %d0
 	movea.l (-1*256+2, %a6), %a0
 	move.b %d5, %d1
@@ -505,19 +480,16 @@ opcode00E2:
 	jmp (0x7f42, %a6)
 opcode00E2_end: | LD (FF00+C), A
 opcode00F0:
-	moveq #0, %d0
 	move.b (%a4)+, %d0
 	movea.l (-1*256+2, %a6), %a0
 	move.b (%a0, %d0.w), %d5
 opcode00F0_end: | LD A, (FF00+nn)
 opcode00F2:
-	moveq #0, %d0
 	move.b %d2, %d0
 	movea.l (-1*256+2, %a6), %a0
 	move.b (%a0, %d0.w), %d5
 opcode00F2_end: | LD A, (FF00+C)
 opcode00FA:
-	moveq #0, %d0
 	move.b (%a4)+, %d0
 	move.b (%a4)+, (6f - opcode00FA + 2 + (-1348), %a6)
 6:
@@ -525,7 +497,6 @@ opcode00FA:
 	move.b (%a0, %d0.w), %d5
 opcode00FA_end: | LD A, (nnnn)
 opcode00EA:
-	moveq #0, %d0
 	move.b (%a4)+, %d0
 	move.b %d5, %d1
 	move.b (%a4)+, (6f - opcode00EA + 2 + (-5444), %a6)
@@ -552,7 +523,6 @@ opcode0021:
 opcode0021_end: | LD HL, nnnn
 opcode0031:
 	| new_SP_immd():
-	moveq #0, %d0
 	move.b (%a4)+, %d0
 	move.b (%a4)+, %d1
 	cmp.b #0xE0, %d1 | Hack for games with stack at top of RAM
@@ -565,10 +535,10 @@ opcode0031:
 6:
 	movea.l (0x7f02, %a6), %a2
 	adda.l %d0, %a2
+	moveq #0, %d0
 opcode0031_end: | LD SP, nnnn
 opcode00F9:
 	| new_SP():
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (SP_BASE, %a5)
@@ -579,21 +549,21 @@ opcode00F9:
 	swap %d7
 opcode00F9_end: | LD SP, HL
 opcode00C5:
-	move.l %d2, %d0
-	swap %d0
-	move.b %d0, -(%a2)
+	move.l %d2, %d1
+	swap %d1
+	move.b %d1, -(%a2)
 	move.b %d2, -(%a2)
 opcode00C5_end: | PUSH BC
 opcode00D5:
-	move.l %d3, %d0
-	swap %d0
-	move.b %d0, -(%a2)
+	move.l %d3, %d1
+	swap %d1
+	move.b %d1, -(%a2)
 	move.b %d3, -(%a2)
 opcode00D5_end: | PUSH DE
 opcode00E5:
-	move.l %d7, %d0
-	swap %d0
-	move.b %d0, -(%a2)
+	move.l %d7, %d1
+	swap %d1
+	move.b %d1, -(%a2)
 	move.b %d7, -(%a2)
 opcode00E5_end: | PUSH HL
 opcode00F5:
@@ -646,14 +616,14 @@ opcode0008:
 6:
 	sub.l (0x7f02, %a6), %d1 | sp now relative to block
 	add.l (SP_BLOCK, %a5), %d1 | sp is now correct
-	moveq #0, %d0
 	move.b (%a4)+, %d0
 	move.b (%a4)+, (6f - opcode0008 + 2 + (2236), %a6)
 6:
 	movea.l (0x7f02, %a6), %a0
-	move.b %d1, (%a0, %d0.w)
+	adda.w %d0, %a0
+	move.b %d1, (%a0)+
 	rol.w #8, %d1
-	move.b %d1, (1, %a0, %d0.w)
+	move.b %d1, (%a0)
 opcode0008_end: | LD (nnnn), SP
 opcode00F8:
 	move.l %a2, %d1
@@ -666,6 +636,7 @@ opcode00F8:
 	clr.w %d6
 	add.w %d0, %d1
 	addx.w %d6, %d6 | update carry, clear zero
+	moveq #0, %d0
 	move.b %d1, %d7
 	swap %d7
 	rol.w #8, %d1
@@ -715,7 +686,6 @@ opcode0085:
 	move.w %sr, %d6 | update zero, carry
 opcode0085_end: | ADD A, L
 opcode0086:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode0086 + 2 + (-31044), %a6)
@@ -794,7 +764,6 @@ opcode008D:
 	move.w %sr, %d6 | update zero, carry
 opcode008D_end: | ADC A, L
 opcode008E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode008E + 2 + (-28996), %a6)
@@ -869,7 +838,6 @@ opcode0095:
 	move.w %sr, %d6 | update zero, carry
 opcode0095_end: | SUB A, L
 opcode0096:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode0096 + 2 + (-26948), %a6)
@@ -948,7 +916,6 @@ opcode009D:
 	move.w %sr, %d6 | update zero, carry
 opcode009D_end: | SBC A, L
 opcode009E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode009E + 2 + (-24900), %a6)
@@ -1029,7 +996,6 @@ opcode00A5:
 0:
 opcode00A5_end: | AND A, L
 opcode00A6:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode00A6 + 2 + (-22852), %a6)
@@ -1105,7 +1071,6 @@ opcode00B5:
 0:
 opcode00B5_end: | OR A, L
 opcode00B6:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode00B6 + 2 + (-18756), %a6)
@@ -1181,7 +1146,6 @@ opcode00AD:
 0:
 opcode00AD_end: | XOR A, L
 opcode00AE:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode00AE + 2 + (-20804), %a6)
@@ -1238,7 +1202,6 @@ opcode00BD:
 	move.w %sr, %d6 | update zero, carry
 opcode00BD_end: | CP A, L
 opcode00BE:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode00BE + 2 + (-16708), %a6)
@@ -1305,7 +1268,6 @@ opcode002C:
 0:
 opcode002C_end: | INC L
 opcode0034:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode0034 + 2 + (13500), %a6)
@@ -1377,7 +1339,6 @@ opcode002D:
 0:
 opcode002D_end: | DEC L
 opcode0035:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcode0035 + 2 + (13756), %a6)
@@ -1450,25 +1411,25 @@ opcode0029:
 	swap %d7
 opcode0029_end: | ADD HL, HL
 opcode0039:
-	move.l %a2, %d0
+	move.l %a2, %d1
 	move.b (SP_BASE, %a5), (6f - opcode0039 + 2 + (14780), %a6)
 6:
-	sub.l (0x7f02, %a6), %d0 | sp now relative to block
-	add.l (SP_BLOCK, %a5), %d0 | sp is now correct
-	add.b %d0, %d7
+	sub.l (0x7f02, %a6), %d1 | sp now relative to block
+	add.l (SP_BLOCK, %a5), %d1 | sp is now correct
+	add.b %d1, %d7
 	swap %d7
-	rol.w #8, %d0
+	rol.w #8, %d1
 	or.b #0x01, %d6
-	addx.b %d0, %d7
+	addx.b %d1, %d7
 	bcs 0f
 	eor.b #0x01, %d6 | update carry
 0:
 	swap %d7
 opcode0039_end: | ADD HL, SP
 opcode00E8:
-	move.b (%a4)+, %d0
-	ext.w %d0
-	adda.w %d0, %a2
+	move.b (%a4)+, %d1
+	ext.w %d1
+	adda.w %d1, %a2
 opcode00E8_end: | ADD SP, nn
 opcode0003:
 	ext.w %d2
@@ -1557,7 +1518,6 @@ opcodeCB05:
 	move.w %sr, %d6 | update zero, carry
 opcodeCB05_end: | RLC L
 opcodeCB06:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB06 + 2 + (1664), %a6)
@@ -1611,7 +1571,6 @@ opcodeCB15:
 	move.w %sr, %d6 | update zero, carry
 opcodeCB15_end: | RL L
 opcodeCB16:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB16 + 2 + (5760), %a6)
@@ -1661,7 +1620,6 @@ opcodeCB0D:
 	move.w %sr, %d6 | update zero, carry
 opcodeCB0D_end: | RRC L
 opcodeCB0E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB0E + 2 + (3712), %a6)
@@ -1715,7 +1673,6 @@ opcodeCB1D:
 	move.w %sr, %d6 | update zero, carry
 opcodeCB1D_end: | RR L
 opcodeCB1E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB1E + 2 + (7808), %a6)
@@ -1765,7 +1722,6 @@ opcodeCB25:
 	move.w %sr, %d6 | update zero, carry
 opcodeCB25_end: | SLA L
 opcodeCB26:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB26 + 2 + (9856), %a6)
@@ -1813,7 +1769,6 @@ opcodeCB2D:
 	move.w %sr, %d6 | update zero, carry
 opcodeCB2D_end: | SRA L
 opcodeCB2E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB2E + 2 + (11904), %a6)
@@ -1861,7 +1816,6 @@ opcodeCB3D:
 	move.w %sr, %d6 | update zero, carry
 opcodeCB3D_end: | SRL L
 opcodeCB3E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB3E + 2 + (16000), %a6)
@@ -1921,7 +1875,6 @@ opcodeCB45:
 0:
 opcodeCB45_end: | BIT L, 0
 opcodeCB46:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB46 + 2 + (18048), %a6)
@@ -1984,7 +1937,6 @@ opcodeCB4D:
 0:
 opcodeCB4D_end: | BIT L, 1
 opcodeCB4E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB4E + 2 + (20096), %a6)
@@ -2047,7 +1999,6 @@ opcodeCB55:
 0:
 opcodeCB55_end: | BIT L, 2
 opcodeCB56:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB56 + 2 + (22144), %a6)
@@ -2110,7 +2061,6 @@ opcodeCB5D:
 0:
 opcodeCB5D_end: | BIT L, 3
 opcodeCB5E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB5E + 2 + (24192), %a6)
@@ -2173,7 +2123,6 @@ opcodeCB65:
 0:
 opcodeCB65_end: | BIT L, 4
 opcodeCB66:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB66 + 2 + (26240), %a6)
@@ -2236,7 +2185,6 @@ opcodeCB6D:
 0:
 opcodeCB6D_end: | BIT L, 5
 opcodeCB6E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB6E + 2 + (28288), %a6)
@@ -2299,7 +2247,6 @@ opcodeCB75:
 0:
 opcodeCB75_end: | BIT L, 6
 opcodeCB76:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB76 + 2 + (30336), %a6)
@@ -2362,7 +2309,6 @@ opcodeCB7D:
 0:
 opcodeCB7D_end: | BIT L, 7
 opcodeCB7E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB7E + 2 + (32384), %a6)
@@ -2401,7 +2347,6 @@ opcodeCBC5:
 	ori.b #0x01, %d7
 opcodeCBC5_end: | SET L, 0
 opcodeCBC6:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBC6 + 2 + (-14720), %a6)
@@ -2435,7 +2380,6 @@ opcodeCBCD:
 	ori.b #0x02, %d7
 opcodeCBCD_end: | SET L, 1
 opcodeCBCE:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBCE + 2 + (-12672), %a6)
@@ -2469,7 +2413,6 @@ opcodeCBD5:
 	ori.b #0x04, %d7
 opcodeCBD5_end: | SET L, 2
 opcodeCBD6:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBD6 + 2 + (-10624), %a6)
@@ -2503,7 +2446,6 @@ opcodeCBDD:
 	ori.b #0x08, %d7
 opcodeCBDD_end: | SET L, 3
 opcodeCBDE:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBDE + 2 + (-8576), %a6)
@@ -2537,7 +2479,6 @@ opcodeCBE5:
 	ori.b #0x10, %d7
 opcodeCBE5_end: | SET L, 4
 opcodeCBE6:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBE6 + 2 + (-6528), %a6)
@@ -2571,7 +2512,6 @@ opcodeCBED:
 	ori.b #0x20, %d7
 opcodeCBED_end: | SET L, 5
 opcodeCBEE:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBEE + 2 + (-4480), %a6)
@@ -2605,7 +2545,6 @@ opcodeCBF5:
 	ori.b #0x40, %d7
 opcodeCBF5_end: | SET L, 6
 opcodeCBF6:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBF6 + 2 + (-2432), %a6)
@@ -2639,7 +2578,6 @@ opcodeCBFD:
 	ori.b #0x80, %d7
 opcodeCBFD_end: | SET L, 7
 opcodeCBFE:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBFE + 2 + (-384), %a6)
@@ -2673,7 +2611,6 @@ opcodeCB85:
 	andi.b #0xFE, %d7
 opcodeCB85_end: | RES L, 0
 opcodeCB86:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB86 + 2 + (-31104), %a6)
@@ -2707,7 +2644,6 @@ opcodeCB8D:
 	andi.b #0xFD, %d7
 opcodeCB8D_end: | RES L, 1
 opcodeCB8E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB8E + 2 + (-29056), %a6)
@@ -2741,7 +2677,6 @@ opcodeCB95:
 	andi.b #0xFB, %d7
 opcodeCB95_end: | RES L, 2
 opcodeCB96:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB96 + 2 + (-27008), %a6)
@@ -2775,7 +2710,6 @@ opcodeCB9D:
 	andi.b #0xF7, %d7
 opcodeCB9D_end: | RES L, 3
 opcodeCB9E:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB9E + 2 + (-24960), %a6)
@@ -2809,7 +2743,6 @@ opcodeCBA5:
 	andi.b #0xEF, %d7
 opcodeCBA5_end: | RES L, 4
 opcodeCBA6:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBA6 + 2 + (-22912), %a6)
@@ -2843,7 +2776,6 @@ opcodeCBAD:
 	andi.b #0xDF, %d7
 opcodeCBAD_end: | RES L, 5
 opcodeCBAE:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBAE + 2 + (-20864), %a6)
@@ -2877,7 +2809,6 @@ opcodeCBB5:
 	andi.b #0xBF, %d7
 opcodeCBB5_end: | RES L, 6
 opcodeCBB6:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBB6 + 2 + (-18816), %a6)
@@ -2911,7 +2842,6 @@ opcodeCBBD:
 	andi.b #0x7F, %d7
 opcodeCBBD_end: | RES L, 7
 opcodeCBBE:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCBBE + 2 + (-16768), %a6)
@@ -2975,7 +2905,6 @@ opcodeCB35:
 0:
 opcodeCB35_end: | SWAP L
 opcodeCB36:
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (6f - opcodeCB36 + 2 + (13952), %a6)
@@ -3000,7 +2929,6 @@ opcodeCB37:
 opcodeCB37_end: | SWAP A
 opcode00C3:
 	| new_PC_immd():
-	moveq #0, %d0
 	move.b (%a4)+, %d0
 	move.b (%a4), %d1
 	move.b %d1, (PC_BASE, %a5)
@@ -3011,7 +2939,6 @@ opcode00C3:
 opcode00C3_end: | JP nnnn
 opcode00E9:
 	| new_PC_HL():
-	moveq #0, %d0
 	move.b %d7, %d0
 	swap %d7
 	move.b %d7, (PC_BASE, %a5)
@@ -3081,12 +3008,10 @@ opcode00CD:
 6:
 	sub.l (0x7f02, %a6), %d1 | pc now relative to block
 	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
+	move.w %d1, -(%a7)
+	move.b (%a7)+, -(%a2)
+	move.b %d1, -(%a2)
 	| new_PC_immd():
-	moveq #0, %d0
 	move.b -(%a4), %d1
 	move.b -(%a4), %d0
 	move.b %d1, (PC_BASE, %a5)
@@ -3120,7 +3045,6 @@ opcode00DC:
 	bne opcode00DC - 5b + (-3840)
 opcode00DC_end: | CALL C, nnnn
 opcode00C9:
-	moveq #0, %d0
 	move.b (%a2)+, %d0
 	move.b (%a2)+, %d1
 	move.b %d1, (PC_BASE, %a5)
@@ -3130,7 +3054,6 @@ opcode00C9:
 	adda.l %d0, %a4
 opcode00C9_end: | RET
 opcode00D9:
-	moveq #0, %d0
 	move.b (%a2)+, %d0
 	move.b (%a2)+, %d1
 	move.b %d1, (PC_BASE, %a5)
@@ -3170,10 +3093,9 @@ opcode00C7:
 6:
 	sub.l (0x7f02, %a6), %d1 | pc now relative to block
 	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
+	move.w %d1, -(%a7)
+	move.b (%a7)+, -(%a2)
+	move.b %d1, -(%a2)
 	clr.b (PC_BASE, %a5)
 	movea.l (%a6, 2), %a4
 opcode00C7_end: | RST 00
@@ -3183,10 +3105,9 @@ opcode00CF:
 6:
 	sub.l (0x7f02, %a6), %d1 | pc now relative to block
 	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
+	move.w %d1, -(%a7)
+	move.b (%a7)+, -(%a2)
+	move.b %d1, -(%a2)
 	clr.b (PC_BASE, %a5)
 	movea.l (%a6, 2), %a4
 	addq.l #8, %a4 | now pc is correct
@@ -3197,10 +3118,9 @@ opcode00D7:
 6:
 	sub.l (0x7f02, %a6), %d1 | pc now relative to block
 	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
+	move.w %d1, -(%a7)
+	move.b (%a7)+, -(%a2)
+	move.b %d1, -(%a2)
 	clr.b (PC_BASE, %a5)
 	movea.l (%a6, 2), %a4
 	lea (0x10, %a4), %a4 | now pc is correct
@@ -3211,10 +3131,9 @@ opcode00DF:
 6:
 	sub.l (0x7f02, %a6), %d1 | pc now relative to block
 	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
+	move.w %d1, -(%a7)
+	move.b (%a7)+, -(%a2)
+	move.b %d1, -(%a2)
 	clr.b (PC_BASE, %a5)
 	movea.l (%a6, 2), %a4
 	lea (0x18, %a4), %a4 | now pc is correct
@@ -3225,10 +3144,9 @@ opcode00E7:
 6:
 	sub.l (0x7f02, %a6), %d1 | pc now relative to block
 	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
+	move.w %d1, -(%a7)
+	move.b (%a7)+, -(%a2)
+	move.b %d1, -(%a2)
 	clr.b (PC_BASE, %a5)
 	movea.l (%a6, 2), %a4
 	lea (0x20, %a4), %a4 | now pc is correct
@@ -3239,10 +3157,9 @@ opcode00EF:
 6:
 	sub.l (0x7f02, %a6), %d1 | pc now relative to block
 	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
+	move.w %d1, -(%a7)
+	move.b (%a7)+, -(%a2)
+	move.b %d1, -(%a2)
 	clr.b (PC_BASE, %a5)
 	movea.l (%a6, 2), %a4
 	lea (0x28, %a4), %a4 | now pc is correct
@@ -3253,10 +3170,9 @@ opcode00F7:
 6:
 	sub.l (0x7f02, %a6), %d1 | pc now relative to block
 	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
+	move.w %d1, -(%a7)
+	move.b (%a7)+, -(%a2)
+	move.b %d1, -(%a2)
 	clr.b (PC_BASE, %a5)
 	movea.l (%a6, 2), %a4
 	lea (0x30, %a4), %a4 | now pc is correct
@@ -3267,10 +3183,9 @@ opcode00FF:
 6:
 	sub.l (0x7f02, %a6), %d1 | pc now relative to block
 	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
+	move.w %d1, -(%a7)
+	move.b (%a7)+, -(%a2)
+	move.b %d1, -(%a2)
 	clr.b (PC_BASE, %a5)
 	movea.l (%a6, 2), %a4
 	lea (0x38, %a4), %a4 | now pc is correct
@@ -3282,12 +3197,16 @@ opcode0076:
 0:
 	tst.b (IME, %a5)
 	beq 1f
-	moveq #-1, %d4
-	move.b #HALT_ACTIVE, (CPU_HALT, %a5)
-	bra 2f
+	clr.b (CPU_HALT, %a5)
+	movea.l (-1*256+2, %a6) ,%a0
+	move.b (LY, %a0), %d1
+	addq.b #2, %d1
+	move.b %d1, (HALT_LY_CHECK, %a5)
+	move.w (NEXT_EVENT, %a5), %d1
+	move.w (-2, %a3, %d1.w), %d1
+	jmp (%a3, %d1.w)
 1:
 	move.b #HALT_PENDING, (CPU_HALT, %a5)
-2:
 opcode0076_end: | HALT
 opcode0027:
 	move.b %d5, %d0 | d0 is current a
@@ -3321,39 +3240,6 @@ opcode00CB_end:
 opcode_illegal:
 	move.w #1, (ERROR, %a5) | Illegal Opcode
 	jmp (return-function_base, %a3)
-generate_int: | input: %d0, number of int
-	clr.b (IME, %a5) | disable interrupts
-	clr.b (CPU_HALT, %a5)
-	move.l %a4, %d1
-	move.b (PC_BASE, %a5), (6f-function_base+2, %a3)
-6:
-	sub.l (0x7f02, %a6), %d1 | pc now relative to block
-	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
-	clr.b (PC_BASE, %a5)
-	movea.l (%a6, 2), %a4
-	adda.l %d0, %a4
-	jmp (%a1)
-generate_int_event: | input: %d0, number of int
-	clr.b (IME, %a5) | disable interrupts
-	clr.b (CPU_HALT, %a5)
-	move.l %a4, %d1
-	move.b (PC_BASE, %a5), (6f-function_base+2, %a3)
-6:
-	sub.l (0x7f02, %a6), %d1 | pc now relative to block
-	add.l (PC_BLOCK, %a5), %d1 | pc is now correct
-	subq.l #2, %a2
-	move.b %d1, (%a2)
-	rol.w #8, %d1
-	move.b %d1, (%a2, 1)
-	clr.b (PC_BASE, %a5)
-	movea.l (%a6, 2), %a4
-	adda.l %d0, %a4
-	END_EVENT end_generate_int_event
-end_generate_int_event:
 
 jump_table:
 .word opcode0000 - function_base

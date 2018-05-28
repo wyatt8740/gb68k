@@ -519,7 +519,7 @@ void new_SP(short loc)
 {
 	// RELATIVE SP --> ABSOULTE SP (in a2)
 	fprintf(func_out, "\t| new_SP():\n");
-	fprintf(func_out, "\tmoveq #0, %%d0\n");
+	//fprintf(func_out, "\tmoveq #0, %%d0\n");
 	fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[loc]);
 	fprintf(func_out, "\tswap %s\n", arg_table[loc]);
 	fprintf(func_out, "\tmove.b %s, (SP_BASE, %%a5)\n", arg_table[loc]);
@@ -535,7 +535,7 @@ void new_SP_immd()
 	// (%a4)+ --> ABSOULTE SP (in a2)
 
 	fprintf(func_out, "\t| new_SP_immd():\n");
-	fprintf(func_out, "\tmoveq #0, %%d0\n");
+	//fprintf(func_out, "\tmoveq #0, %%d0\n");
 	fprintf(func_out, "\tmove.b (%%a4)+, %%d0\n");
 	fprintf(func_out, "\tmove.b (%%a4)+, %%d1\n");
 	fprintf(func_out, "\tcmp.b #0xE0, %%d1 | Hack for games with stack at top of RAM\n");
@@ -548,13 +548,14 @@ void new_SP_immd()
 	fprintf(func_out, "6:\n");
 	fprintf(func_out, "\tmovea.l (0x7f02, %%a6), %%a2\n");
 	fprintf(func_out, "\tadda.l %%d0, %%a2\n");
+	fprintf(func_out, "\tmoveq #0, %%d0\n");
 }
 
 //assumes relative PC (word) is in D2, and that flags are set apropriately
 void new_PC_HL()
 {
 	fprintf(func_out, "\t| new_PC_HL():\n");
-	fprintf(func_out, "\tmoveq #0, %%d0\n");
+	//fprintf(func_out, "\tmoveq #0, %%d0\n");
 	fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[ARG_H]);
 	fprintf(func_out, "\tswap %s\n", arg_table[ARG_H]);
 	fprintf(func_out, "\tmove.b %s, (PC_BASE, %%a5)\n", arg_table[ARG_H]);
@@ -569,7 +570,7 @@ void new_PC_HL()
 void new_PC_immd(bool read_dir)
 {
 	fprintf(func_out, "\t| new_PC_immd():\n");
-	fprintf(func_out, "\tmoveq #0, %%d0\n");
+	//fprintf(func_out, "\tmoveq #0, %%d0\n");
 	if(read_dir) {
 		fprintf(func_out, "\tmove.b (%%a4)+, %%d0\n");
 		fprintf(func_out, "\tmove.b (%%a4), %%d1\n");
@@ -592,15 +593,18 @@ void push_PC()
 	fprintf(func_out, "\tsub.l (0x7f02, %%a6), %%d1 | pc now relative to block\n");
 	fprintf(func_out, "\tadd.l (PC_BLOCK, %%a5), %%d1 | pc is now correct\n");
 
-	fprintf(func_out, "\tsubq.l #2, %%a2\n");
+	/*fprintf(func_out, "\tsubq.l #2, %%a2\n");
 	fprintf(func_out, "\tmove.b %%d1, (%%a2)\n");
 	fprintf(func_out, "\trol.w #8, %%d1\n");
-	fprintf(func_out, "\tmove.b %%d1, (%%a2, 1)\n");
+	fprintf(func_out, "\tmove.b %%d1, (%%a2, 1)\n");*/
+	fprintf(func_out, "\tmove.w %%d1, -(%%a7)\n");
+	fprintf(func_out, "\tmove.b (%%a7)+, -(%%a2)\n");
+	fprintf(func_out, "\tmove.b %%d1, -(%%a2)\n");
 }
 
 void pop_PC()
 {
-	fprintf(func_out, "\tmoveq #0, %%d0\n");
+	//fprintf(func_out, "\tmoveq #0, %%d0\n");
 	fprintf(func_out, "\tmove.b (%%a2)+, %%d0\n");
 	fprintf(func_out, "\tmove.b (%%a2)+, %%d1\n");
 	fprintf(func_out, "\tmove.b %%d1, (PC_BASE, %%a5)\n");
@@ -626,7 +630,7 @@ void write_prefix(ARG_FORMAT *arg, ARG_FORMAT *other, bool read_modify, int opco
 	//char no_carry[1024], no_zero[1024], no_subtract[1024];
 	if(arg->prefix == PREFIX_MEM_REG_INDIR) {
 
-		fprintf(func_out, "\tmoveq #0, %%d0\n");
+		//fprintf(func_out, "\tmoveq #0, %%d0\n");
 		fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[arg->prefix_tag]);
 		
 		//fprintf(func_out, "\tmove.b %s, (%%a6)\n", arg_table[arg->prefix_tag]);
@@ -712,7 +716,7 @@ void write_prefix(ARG_FORMAT *arg, ARG_FORMAT *other, bool read_modify, int opco
 		//	arg->tag = ARG_DT2;
 		//}
 	} else if(arg->prefix == PREFIX_MEM_IMMD_INDIR) {
-		fprintf(func_out, "\tmoveq #0, %%d0\n");
+		//fprintf(func_out, "\tmoveq #0, %%d0\n");
 		fprintf(func_out, "\tmove.b (%%a4)+, %%d0\n");
 		
 		//fprintf(func_out, "\tmove.b %s, (%%a6)\n", arg_table[arg->prefix_tag]);
@@ -745,7 +749,7 @@ void write_prefix(ARG_FORMAT *arg, ARG_FORMAT *other, bool read_modify, int opco
 			}
 		}
 	} else if(arg->prefix == PREFIX_MEM_FF00) {
-		fprintf(func_out, "\tmoveq #0, %%d0\n");
+		//fprintf(func_out, "\tmoveq #0, %%d0\n");
 		fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[arg->prefix_tag]);
 		fprintf(func_out, "\tmovea.l (-1*256+2, %%a6), %%a0\n");
 		
@@ -761,7 +765,9 @@ void write_prefix(ARG_FORMAT *arg, ARG_FORMAT *other, bool read_modify, int opco
 		fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[ARG_IMMD8]);
 		fprintf(func_out, "\text.w %%d0\n");
 		updateC_clearZ_fast("\tadd.w %%d0, %%d1\n");
+		fprintf(func_out, "\tmoveq #0, %%d0\n");
 	} else if(arg->prefix == PREFIX_GET_IMMD16) {
+		//UNUSED
 		fprintf(func_out, "\tmove.b (%%a4, 1), %%d1\n");
 		fprintf(func_out, "\trol.w #8, %%d1\n");
 		fprintf(func_out, "\tmove.b (%%a4), %%d1\n");
@@ -821,17 +827,17 @@ bool write_LD8(ARG_FORMAT *src, ARG_FORMAT *dst)
 	if(dst->prefix == NONE) {
 		if(src->prefix == NONE) {
 			if(strcmp(arg_table[src->tag], arg_table[dst->tag]) == 0 && swap_table[src->tag]) { //high to low
-				fprintf(func_out, "\tmove.l %s, %%d0\n", arg_table[src->tag]);
-				fprintf(func_out, "\tswap %%d0\n");
-				fprintf(func_out, "\tmove.b %%d0, %s\n", arg_table[dst->tag]);
+				fprintf(func_out, "\tmove.l %s, %%d1\n", arg_table[src->tag]);
+				fprintf(func_out, "\tswap %%d1\n");
+				fprintf(func_out, "\tmove.b %%d1, %s\n", arg_table[dst->tag]);
 			} else if(strcmp(arg_table[src->tag], arg_table[dst->tag]) == 0 && swap_table[dst->tag]) { //low to high
-				fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[src->tag]);
+				fprintf(func_out, "\tmove.b %s, %%d1\n", arg_table[src->tag]);
 				fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
-				fprintf(func_out, "\tmove.b %%d0, %s\n", arg_table[dst->tag]);
+				fprintf(func_out, "\tmove.b %%d1, %s\n", arg_table[dst->tag]);
 			} else if(swap_table[dst->tag] && swap_table[src->tag]) {
-				fprintf(func_out, "\tmove.l %s, %%d0\n", arg_table[src->tag]);
-				fprintf(func_out, "\tmove.b %s, %%d0\n", arg_table[dst->tag]);
-				fprintf(func_out, "\tmove.l %%d0, %s\n", arg_table[dst->tag]);
+				fprintf(func_out, "\tmove.l %s, %%d1\n", arg_table[src->tag]);
+				fprintf(func_out, "\tmove.b %s, %%d1\n", arg_table[dst->tag]);
+				fprintf(func_out, "\tmove.l %%d1, %s\n", arg_table[dst->tag]);
 			} else if(!swap_table[dst->tag] && !swap_table[src->tag]) {
 				fprintf(func_out, "\tmove.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
 			} else if(!swap_table[dst->tag] && swap_table[src->tag]) {
@@ -887,9 +893,10 @@ bool write_LD16(ARG_FORMAT *src, ARG_FORMAT *dst)
 	
 	if(dst->tag == ARG_MEM) { //handle proper endianess
 		if(src->prefix == PREFIX_GET_SP) {
-			fprintf(func_out, "\tmove.b %s, (%%a0, %%d0.w)\n", arg_table[src->tag]);
+			fprintf(func_out, "\tadda.w %%d0, %%a0\n");
+			fprintf(func_out, "\tmove.b %s, (%%a0)+\n", arg_table[src->tag]);
 			fprintf(func_out, "\trol.w #8, %s\n", arg_table[src->tag]);
-			fprintf(func_out, "\tmove.b %s, (1, %%a0, %%d0.w)\n", arg_table[src->tag]);
+			fprintf(func_out, "\tmove.b %s, (%%a0)\n", arg_table[src->tag]);
 		} else {
 			fprintf(func_out, "\tmove.b %s, (%%a0, %%d0.w)\n", arg_table[src->tag]);
 			fprintf(func_out, "\tswap %s\n", arg_table[src->tag]);
@@ -917,9 +924,9 @@ bool write_PUSH(ARG_FORMAT *dst)
 		fprintf(func_out, "\tmove.b %%d5, -(%%a2)\n");
 		fprintf(func_out, "\tmove.b %%d0, -(%%a2)\n");
 	} else {
-		fprintf(func_out, "\tmove.l %s, %%d0\n", arg_table[dst->tag]);
-		fprintf(func_out, "\tswap %%d0\n");
-		fprintf(func_out, "\tmove.b %%d0, -(%%a2)\n");
+		fprintf(func_out, "\tmove.l %s, %%d1\n", arg_table[dst->tag]);
+		fprintf(func_out, "\tswap %%d1\n");
+		fprintf(func_out, "\tmove.b %%d1, -(%%a2)\n");
 		fprintf(func_out, "\tmove.b %s, -(%%a2)\n", arg_table[dst->tag]);
 	}
 
@@ -1141,16 +1148,16 @@ bool write_ADD16(ARG_FORMAT *src, ARG_FORMAT *dst)
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
 	if(dst->prefix == PREFIX_GET_SP) { //HACK!! (doesn't set flags right...)
-		fprintf(func_out, "\tmove.b (%%a4)+, %%d0\n");
-		fprintf(func_out, "\text.w %%d0\n");
-		fprintf(func_out, "\tadda.w %%d0, %%a2\n");
+		fprintf(func_out, "\tmove.b (%%a4)+, %%d1\n");
+		fprintf(func_out, "\text.w %%d1\n");
+		fprintf(func_out, "\tadda.w %%d1, %%a2\n");
 	} else {
 		if(src->prefix == PREFIX_GET_SP) {
-			get_SP(ARG_DT0);
-			fprintf(func_out, "\tadd.b %%d0, %s\n", arg_table[dst->tag]);
+			get_SP(ARG_DT1);
+			fprintf(func_out, "\tadd.b %%d1, %s\n", arg_table[dst->tag]);
 			fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
-			fprintf(func_out, "\trol.w #8, %%d0\n");
-			updateC("\taddx.b %%d0, %s\n", arg_table[dst->tag]);
+			fprintf(func_out, "\trol.w #8, %%d1\n");
+			updateC("\taddx.b %%d1, %s\n", arg_table[dst->tag]);
 			fprintf(func_out, "\tswap %s\n", arg_table[dst->tag]);
 		} else {
 			fprintf(func_out, "\tadd.b %s, %s\n", arg_table[src->tag], arg_table[dst->tag]);
@@ -1491,18 +1498,23 @@ bool write_RST(ARG_FORMAT *dst)
 bool write_HALT()
 {
 	fprintf(func_out, "opcode%02X%02X:\n", prefix, opcode_index);
+
 	fprintf(func_out, "\tcmp.b #HALT_AFTER_EI, (CPU_HALT, %%a5)\n");
 	fprintf(func_out, "\tbne 0f\n");
 	fprintf(func_out, "\tst (IME, %%a5)\n");
 	fprintf(func_out, "0:\n");
 	fprintf(func_out, "\ttst.b (IME, %%a5)\n");
 	fprintf(func_out, "\tbeq 1f\n");
-	fprintf(func_out, "\tmoveq #-1, %%d4\n");
-	fprintf(func_out, "\tmove.b #HALT_ACTIVE, (CPU_HALT, %%a5)\n");
-	fprintf(func_out, "\tbra 2f\n");
+	fprintf(func_out, "\tclr.b (CPU_HALT, %%a5)\n");
+	fprintf(func_out, "\tmovea.l (-1*256+2, %%a6) ,%%a0\n");
+	fprintf(func_out, "\tmove.b (LY, %%a0), %%d1\n");
+	fprintf(func_out, "\taddq.b #2, %%d1\n");
+	fprintf(func_out, "\tmove.b %%d1, (HALT_LY_CHECK, %%a5)\n");
+	fprintf(func_out, "\tmove.w (NEXT_EVENT, %%a5), %%d1\n");
+	fprintf(func_out, "\tmove.w (-2, %%a3, %%d1.w), %%d1\n");
+	fprintf(func_out, "\tjmp (%%a3, %%d1.w)\n");
 	fprintf(func_out, "1:\n");
 	fprintf(func_out, "\tmove.b #HALT_PENDING, (CPU_HALT, %%a5)\n");
-	fprintf(func_out, "2:\n");
 
 	return true;
 }
@@ -2094,7 +2106,7 @@ int main(int argc, void *argv[])
 	//push_PC();
 	//pop_PC();
 	prefix = 0xff;
-	generate_int();
+	//generate_int();
 
 	
 	

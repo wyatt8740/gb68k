@@ -204,42 +204,6 @@ write16_finish:
 	NEXT_INSTRUCTION2 end_special_write16
 end_special_write16:*/
 
-| sets timer to the proper state (enabled or disabled)
-.global reset_timer
-reset_timer:
-	tst.b (ENABLE_TIMER, %a5)
-	beq disable_timer
-	
-	movea.l (-1*256+2, %a6), %a0
-	move.b (TAC, %a0), %d0
-	btst #2, %d0
-	beq disable_timer|reset_timer_off
-	and.w #0x0003, %d0
-	add.b %d0, %d0
-	add.b %d0, %d0 | d0 *= 4
-	lea (timer_func_table-function_base, %a3), %a0
-	movea.l (%a0, %d0.w), %a0 | a0 points to proper timer func
-	lea (timer_entry+2-function_base, %a3), %a1
-	suba.l %a1, %a0 | now a0 is offset from timer_entry to timer func
-	move.w %a0, (timer_entry-function_base, %a3) | patch in branch offset
-	move.b #0x60, (timer_entry-function_base, %a3) | (timer_entry) = BRA
-	
-	lea (timer_func_table-function_base, %a3), %a0
-	movea.l (%a0, %d0.w), %a0 | a0 points to proper timer func
-	lea (timer_entry_off+2-function_base, %a3), %a1
-	suba.l %a1, %a0 | now a0 is offset from timer_entry_off to timer func
-	move.w %a0, (timer_entry_off+2-function_base, %a3) | patch in branch offset
-	move.w #0x6000, (timer_entry_off-function_base, %a3) | (timer_entry) = BRA
-	rts
-|reset_timer_off:
-|	move.w #0x4E71, (timer_entry-function_base, %a3) | (timer_entry) = NOP
-|	move.l #0x4E714E71, (timer_entry_off-function_base, %a3) | (timer_entry_off) = NOP; NOP
-|	rts
-disable_timer:
-	move.w #0x4E71, (timer_entry-function_base, %a3) | (timer_entry) = NOP
-	move.l #0x4E714E71, (timer_entry_off-function_base, %a3) | (timer_entry_off) = NOP; NOP
-	rts
-
 io_write:
 	move.b %d0, (end_io_write - io_write - 256 - 2 + 6, %a6)
 	jmp (0x7f00+6+MEM_WRITE_SIZE, %a6)
@@ -511,7 +475,7 @@ io_write_size_table:
 .byte end_io_write_DIV - io_write_DIV		| 04
 .byte end_io_write_default - io_write_default	| 05
 .byte end_io_write_default - io_write_default	| 06
-.byte 0/*end_io_write_TAC - io_write_TAC*/	| 07
+.byte end_io_write_TAC - io_write_TAC		| 07
 .byte end_io_write_default - io_write_default	| 08
 .byte end_io_write_default - io_write_default	| 09
 .byte end_io_write_default - io_write_default	| 0A
@@ -776,7 +740,7 @@ io_write_P1_92:
 		
 get_keys_89:
 	move.w #0xfffe, 0x600018 | select row 0
-	move.w #24, %d0
+	moveq #24, %d0
 0:
 	dbra %d0, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
@@ -803,20 +767,23 @@ down_not_pressed_89:
 keys_done:
 	ori.b #0xf0, %d1
 	move.b %d1, (P1, %a0)
+	moveq #0, %d0
 	NEXT_INSTRUCTION2 button_select_89
 button_select_89:
 	lsr.b #4, %d0
 	ori.b #0xf0, %d0
 	move.b %d0, (P1, %a0)
+	moveq #0, %d0
 	NEXT_INSTRUCTION2 keypad_disabled
 keypad_disabled:
 	st (P1, %a0)
+	moveq #0, %d0
 	NEXT_INSTRUCTION2 end_io_write_P1_89
 end_io_write_P1_89:
 
 get_keys_92:
 	move.w #0xfffe, 0x600018 | select row 0
-	move.w #24, %d0
+	moveq #24, %d0
 0:
 	dbra %d0, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
@@ -846,7 +813,7 @@ button_select_92:
 	cmp.b #3, (CALC_TYPE, %a5)
 	beq button_select_v200
 	move.w #~(1<<6), 0x600018 | select row 6
-	move.w #24, %d0
+	moveq #24, %d0
 0:
 	dbra %d0, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
@@ -859,7 +826,7 @@ start_not_pressed_92:
 	bclr #0, %d1
 a_not_pressed_92:
 	move.w #~(1<<7), 0x600018 | select row 7
-	move.w #24, %d0
+	moveq #24, %d0
 0:
 	dbra %d0, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
@@ -877,7 +844,7 @@ button_select_v200:
 	bclr #0, %d1
 a_not_pressed_v200:
 	move.w #~(1<<9), 0x600018 | select row 9
-	move.w #24, %d0
+	moveq #24, %d0
 0:
 	dbra %d0, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
@@ -886,7 +853,7 @@ a_not_pressed_v200:
 	bclr #1, %d1
 b_not_pressed_v200:
 	move.w #~(1<<6), 0x600018 | select row 6
-	move.w #24, %d0
+	moveq #24, %d0
 0:
 	dbra %d0, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
@@ -895,7 +862,7 @@ b_not_pressed_v200:
 	bclr #3, %d1
 start_not_pressed_v200:
 	move.w #~(1<<7), 0x600018 | select row 7
-	move.w #24, %d0
+	moveq #24, %d0
 0:
 	dbra %d0, 0b | wait
 	move.b 0x60001B, %d0 | read keys from port
@@ -905,6 +872,7 @@ start_not_pressed_v200:
 	bra keys_done
 	
 io_write_SC:
+	move.b %d1, (SC, %a0)
 	tst.b (ENABLE_SERIAL, %a5) | should we even try?
 	beq 0f
 	btst #0, %d1 | don't generate int if using external clock
@@ -913,68 +881,55 @@ io_write_SC:
 	beq 0f
 	move.b #0xff, (SB, %a0) | no external gb present, default to 0xff
 	bset #3, (IF, %a0)
-	lea (0f, %pc), %a1
 	jmp (check_interrupts-function_base, %a3)
-0:
-	move.b %d1, (SC, %a0)
+0:	
 end_io_write_SC:
 	
 io_write_IF:
 	and.b #0x0f, %d1
 	move.b %d1, (IF, %a0)
-	lea (0f, %pc), %a1
 	jmp (check_interrupts-function_base, %a3) 
-0:
 end_io_write_IF:
 
 io_write_IE:
 	and.b #0x0f, %d1
 	move.b %d1, (IE, %a0)
-	lea (0f, %pc), %a1
 	jmp (check_interrupts-function_base, %a3)
-0:
 end_io_write_IE:
 
 io_write_DIV:
 	clr.b (DIV, %a0)
 end_io_write_DIV:
 
-io_write_TAC:
-	jmp (write_TAC-function_base, %a3)
-
-write_TAC:
-	move.b %d1, %d0
-	or.b #0xf8, %d0
-	move.b %d0, (TAC, %a0)
+.global reset_timer
+reset_timer:
 	tst.b (ENABLE_TIMER, %a5)
-	beq 0f | timer turned off in options
+	beq disable_timer
+	movea.l (-1*256+2, %a6), %a0
+	move.b (TAC, %a0), %d1
 	btst #2, %d1
-	beq timer_off
-	and.w #0x0003, %d0
-	add.b %d0, %d0
-	add.b %d0, %d0 | d0 *= 4
-	lea (timer_func_table-function_base, %a3), %a0
-	movea.l (%a0, %d0.w), %a0 | a0 points to proper timer func
-	lea (timer_entry+2-function_base, %a3), %a1
-	suba.l %a1, %a0 | now a0 is offset from timer_entry to timer func
-	move.w %a0, (timer_entry-function_base, %a3) | patch in branch offset
-	move.b #0x60, (timer_entry-function_base, %a3) | (timer_entry) = BRA
-	
-	lea (timer_func_table-function_base, %a3), %a0
-	movea.l (%a0, %d0.w), %a0 | a0 points to proper timer func
-	lea (timer_entry_off+2-function_base, %a3), %a1
-	suba.l %a1, %a0 | now a0 is offset from timer_entry_off to timer func
-	move.w %a0, (timer_entry_off+2-function_base, %a3) | patch in branch offset
-	move.w #0x6000, (timer_entry_off-function_base, %a3) | (timer_entry) = BRA
-	
-	bra 0f
-timer_off:
-	move.w #0x4E71, (timer_entry-function_base, %a3) | (timer_entry) = NOP
-	move.l #0x4E714E71, (timer_entry_off-function_base, %a3) | (timer_entry_off) = NOP; NOP
-0:
-	NEXT_INSTRUCTION2 end_write_TAC
-end_write_TAC:
+	beq disable_timer
+	and.w #0x0003, %d1
+	lea (timer_speed_table-function_base, %a3), %a0
+	move.b (%a0, %d1.w), (TIMER_SPEED, %a5)
+	move.b (4, %a0, %d1.w), (TIMER_SHIFT, %a5)
+	move.l (timer_func_base_jsr-function_base, %a3), %d1
+	move.l %d1, (timer_entry-function_base, %a3)
+	move.l %d1, (timer_entry_off-function_base, %a3)
+	move.l (timer_func_halt_jsr-function_base, %a3), (timer_entry_halt-function_base, %a3)
+	rts
+disable_timer:
+	move.l #0x4E714E71, %d1
+	move.l %d1, (timer_entry-function_base, %a3) | (timer_entry) = NOP; NOP
+	move.l %d1, (timer_entry_off-function_base, %a3) | (timer_entry_off) = NOP; NOP
+	move.l %d1, (timer_entry_halt-function_base, %a3) | (timer_entry_halt) = NOP; NOP
+	rts
 
+io_write_TAC:
+	or.b #0xf8, %d1
+	move.b %d1, (TAC, %a0)
+	jsr (reset_timer-function_base, %a3)
+end_io_write_TAC:
 
 io_write_LY:
 	clr.b (LY, %a0)
@@ -1075,20 +1030,23 @@ reset_stat:
 	btst #6, %d0
 	sne %d1
 	and.b #0x02, %d1 | d0[6] -> d1
-	move.b %d1, (stat_patch_mode1_coincidence+3)
 	move.b %d1, (stat_patch_mode2_coincidence+3)
+	move.b %d1, (stat_patch_mode2_coincidence_halt+3)
 	btst #5, %d0
 	sne %d1
 	and.b #0x02, %d1 | d0[6] -> d1
 	move.b %d1, (stat_patch_mode2_int+3)
+	move.b %d1, (stat_patch_mode2_int_halt+3)
 	btst #4, %d0
 	sne %d1
 	and.b #0x02, %d1 | d0[6] -> d1
 	move.b %d1, (stat_patch_mode1_int+3)
+	move.b %d1, (stat_patch_mode1_int_halt+3)
 	btst #3, %d0
 	sne %d1
 	and.b #0x02, %d1 | d0[6] -> d1
 	move.b %d1, (stat_patch_mode0_int+3)
+	move.b %d1, (stat_patch_mode0_int_halt+3)
 	rts
 
 |(6f - opcode%02X%02X + 2 + (%d), %%a6)\n", arg, prefix, opcode_index, offset);
@@ -1097,10 +1055,10 @@ io_write_DMA:
 6:
 	movea.l (0x7f02, %a6), %a0 | a0 is start of memory to transfer
 	movea.l (-2*256+2, %a6), %a1 | a1 is OAM
-	moveq #39, %d0 | counter
+	moveq #39, %d1 | counter
 dma_loop:
 	move.l (%a0)+, (%a1)+
-	dbf %d0, dma_loop
+	dbf %d1, dma_loop
 end_io_write_DMA:
 
 .global reset_palette
@@ -1144,12 +1102,13 @@ io_write_BGP:
 	sne -(%a0)
 	dbf %d0, 0b
 
-	move #95, %d0
+	moveq #95, %d0
 	move.l #0xfefefefe, %d1
 	lea (UPDATE_PAL, %a5), %a0
 0:
 	and.l %d1, (%a0)+
 	dbf %d0, 0b
+	moveq #0, %d0
 end_io_write_BGP:
 
 io_write_OBP0:
@@ -1163,12 +1122,13 @@ io_write_OBP0:
 	cmp.b #8, %d0
 	bne 0b
 
-	move #95, %d0
+	moveq #64, %d0
 	move.l #0xfdfdfdfd, %d1
 	lea (UPDATE_PAL, %a5), %a0
 0:
 	and.l %d1, (%a0)+
 	dbf %d0, 0b
+	moveq #0, %d0
 end_io_write_OBP0:
 
 io_write_OBP1:
@@ -1182,12 +1142,13 @@ io_write_OBP1:
 	cmp.b #8, %d0
 	bne 0b
 
-	move #95, %d0
+	moveq #64, %d0
 	move.l #0xfbfbfbfb, %d1
 	lea (UPDATE_PAL, %a5), %a0
 0:
 	and.l %d1, (%a0)+
 	dbf %d0, 0b
+	moveq #0, %d0
 end_io_write_OBP1:
 
 .macro BG_GFX_WRITE offset
@@ -1293,12 +1254,13 @@ mbcX_0000: | ram enable
 	seq (RAM_ENABLE, %a5)
 	lea (-96*256+6, %a6), %a0 | a1 points to proper mem_ptr
 	jsr (get_ram_write-function_base, %a3)
-	moveq #0, %d0
+	|moveq #0, %d0
 	move.b (RAM_BLOCKS, %a5), %d0
 ram_enable_loop:
 	move.l %d1, (%a0)
 	lea (256, %a0), %a0
 	dbf %d0, ram_enable_loop
+	moveq #0, %d0
 end_mbcX_0000:
 
 mbc1_2000: | rom select
@@ -1358,7 +1320,7 @@ mbc3_4000: | ram bank / rtc select
 	tst.l (RTC_BLOCK, %a5)
 	beq 2f | no rtc installed
 	and.b #0x0F, %d0
-	subq #0x08, %d0
+	subq.b #0x08, %d0
 	st (RTC_ENABLE, %a5)
 	bra 1f	
 0:	
@@ -1370,7 +1332,7 @@ mbc3_4000: | ram bank / rtc select
 end_mbc3_4000:
 
 rtc_refresh_values: | copy the selected rtc register into the memory buffer
-	moveq #0, %d0
+	|moveq #0, %d0
 	move.b (CURRENT_RAM, %a5), %d0
 	lea (RTC_LATCHED, %a5), %a0
 	move.b (%a0, %d0.w), %d0 | get currently selected rtc reg
@@ -1381,10 +1343,11 @@ rtc_refresh_values: | copy the selected rtc register into the memory buffer
 	swap %d0
 	move.w %d1, %d0 | copy value into each byte of d0
 	movea.l (RTC_BLOCK, %a5), %a0 | this is where we'll put it
-	move.w #63, %d1 | this is how many times we'll copy it
+	moveq #63, %d1 | this is how many times we'll copy it
 rtc_latch_loop:
 	move.l %d0, (%a0)+
 	dbf %d1, rtc_latch_loop
+	moveq #0, %d0
 	rts
 	
 mbc3_6000: | rtc latch
@@ -1409,7 +1372,7 @@ mbc3_6000: | rtc latch
 end_mbc3_6000:
 
 mbc3_rtc: | when rtc regs are changed
-	moveq #0, %d0
+	|moveq #0, %d0
 	move.b (CURRENT_RAM, %a5), %d0
 	lea (RTC_CURRENT, %a5), %a0
 	move.b %d1, (%a0, %d0.w) | update actual value
@@ -1418,7 +1381,7 @@ mbc3_rtc: | when rtc regs are changed
 end_mbc3_rtc:
 	
 mbc5_2000: | rom select (bits 0 - 7)
-	moveq #0, %d0
+	|moveq #0, %d0
 	move.b %d1, %d0
 	jsr (rom_bank-function_base, %a3)
 end_mbc5_2000:
@@ -1495,6 +1458,7 @@ rom_bank_loop1:
 	adda.l %d2, %a4 | now pc is correct*/
 	|jbsr update_reg_indir
 	move.l (%sp)+, %a3 | restore a3
+	moveq #0, %d0
 	rts
 
 ram_bank: |input %d0, ram bank to switch to
@@ -1513,7 +1477,7 @@ ram_bank_nocheck:
 	movem.l %a0/%d2, -(%sp)
 
 	move.b %d0, (CURRENT_RAM, %a5)
-	and.l #0x000000ff, %d0
+	|and.l #0x000000ff, %d0
 	moveq #13, %d1
 	lsl.l %d1, %d0 | d2 *= 8192 (size of 1 bank)
 	movea.l (GB_RAM, %a5), %a0
@@ -1534,6 +1498,7 @@ ram_bank_loop:
 	dbf %d0, ram_bank_loop
 	
 	movem.l (%sp)+, %a0/%d2
+	moveq #0, %d0
 	|movea.l (%a0), %a4 | pc points to start of block
 	|adda.l %d3, %a4 | now pc is correct
 	|jbsr update_reg_indir
@@ -1543,7 +1508,7 @@ rtc_bank:
 	cmp.b #5, %d0
 	bhi no_bank
 	move.b %d0, (CURRENT_RAM, %a5)
-	and.w #0x00ff, %d0
+	|and.w #0x00ff, %d0
 	movea.l (RTC_BLOCK, %a5), %a0 | pointer to rtc reg memory
 	lea (-96*256+2, %a6), %a1 | a1 points to proper mem_ptr
 	jsr get_ram_write
@@ -1554,6 +1519,7 @@ rtc_bank_loop:
 	move.l %d1, (%a1)
 	lea (252, %a1), %a1
 	dbf %d0, rtc_bank_loop
+	moveq #0, %d0
 	jmp rtc_refresh_values | rts will fall through to caller
 
 write_disable:
