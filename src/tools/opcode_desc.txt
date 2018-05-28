@@ -1,0 +1,89 @@
+01 rrr RRR : LD8 rrr, RRR
+00 rrr 110 : LD8 rrr, byte
+00 001 010 : LD8 A, (BC)
+00 011 010 : LD8 A, (DE)
+00 000 010 : LD8 (BC), A
+00 010 010 : LD8 (DE), A
+00 100 010 : LD8 (HL)+, A
+00 101 010 : LD8 A, (HL)+
+00 110 010 : LD8 (HL)-, A
+00 111 010 : LD8 A, (HL)-
+11 100 000 : LD8 (FF00+byte), A
+11 100 010 : LD8 (FF00+C), A
+11 110 000 : LD8 A, (FF00+byte)
+11 110 010 : LD8 A, (FF00+C)
+11 111 010 : LD8 A, (nn)
+11 101 010 : LD8 (nn), A
+00 dd 0001 : LD16 dd, word
+11 11 1001 : LD16 SP, HL
+11 qq 0101 : PUSH qq
+11 qq 0001 : POP qq
+00 00 1000 : LD16 (nn), SP
+11 11 1000 : LD16 HL, SP+byte
+10 000 rrr : ADD A, rrr
+11 000 110 : ADD A, byte
+10 001 rrr : ADC A, rrr
+11 001 110 : ADC A, byte
+10 010 rrr : SUB A, rrr
+11 010 110 : SUB A, byte
+10 011 rrr : SBC A, rrr
+11 011 110 : SBC A, byte
+10 100 rrr : AND A, rrr
+11 100 110 : AND A, byte
+10 110 rrr : OR A, rrr
+11 110 110 : OR A, byte
+10 101 rrr : XOR A, rrr
+11 101 110 : XOR A, byte
+10 111 rrr : CP A, rrr
+11 111 110 : CP A, byte
+00 rrr 100 : INC rrr
+00 rrr 101 : DEC rrr
+001 01 111 : CPL
+001 11 111 : CCF
+001 10 111 : SCF
+1111 00 11 : DI
+1111 10 11 : EI
+00 dd 1001 : ADD16 HL, dd
+11 10 1000 : ADD16 SP, byte
+00 dd 0011 : INC16 dd
+00 dd 1011 : DEC16 dd
+000 00 111 : RLCA
+000 10 111 : RLA
+000 01 111 : RRCA
+000 11 111 : RRA
+1100 1011 00 000 rrr : RLC rrr
+1100 1011 00 010 rrr : RL rrr
+1100 1011 00 001 rrr : RRC rrr
+1100 1011 00 011 rrr : RR rrr
+1100 1011 00 100 rrr : SLA rrr
+1100 1011 00 101 rrr : SRA rrr
+1100 1011 00 111 rrr : SRL rrr
+1100 1011 01 iii rrr : BIT rrr, iii
+1100 1011 11 iii rrr : SET rrr, iii
+1100 1011 10 iii rrr : RES rrr, iii
+1100 1011 00 110 rrr : SWAP rrr
+110 00 011 : JP word
+111 01 001 : JP HL
+110 cc 010 : Jcc cc, word
+000 11 000 : JR byte
+001 cc 000 : JRcc cc, byte
+110 01 101 : CALL word
+110 cc 100 : CALLcc cc, word
+110 01 001 : RET
+110 11 001 : RETI
+110 cc 000 : RETcc cc
+11 ttt 111 : RST ttt
+01110110 : HALT
+00100111 : DAA
+
+
+
+
+
+
+
+
+
+
+
+
